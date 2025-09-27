@@ -657,8 +657,12 @@ app.post('/api/inventory/sample', async (req, res) => {
       // Process each unique asset for this owner
       Object.values(ownerAssets[owner]).forEach(({ asset, violationTypes }) => {
         ownerStats[owner].count++;
-        ownerStats[owner].violations++;
         totalViolatingAssets++;
+        
+        // Count violations by type, not just by asset
+        violationTypes.forEach(violationType => {
+          ownerStats[owner].violations++;
+        });
         
         // Store asset with type information
         const assetName = asset.name || asset.assetId || 'Unknown Asset';
