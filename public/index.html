@@ -1,0 +1,1203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Firefly EOL Automation</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 1.1rem;
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        .step {
+            margin-bottom: 32px;
+            padding: 32px;
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 16px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+            transition: all 0.3s ease;
+        }
+
+        .step:hover {
+            border-color: #667eea;
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.15);
+            transform: translateY(-2px);
+        }
+
+        .step h2 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 1.5rem;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #555;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 16px;
+            transition: border-color 0.3s ease;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: transform 0.2s ease;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .table th,
+        .table td {
+            padding: 16px 12px;
+            text-align: left;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .table th {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-weight: 600;
+            color: white;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .table tr:hover {
+            background: #f8f9fa;
+        }
+
+        .table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .checkbox {
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+        }
+
+        .owner-email {
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 13px;
+            color: #495057;
+        }
+
+        .resource-count {
+            font-weight: 600;
+            color: #007bff;
+        }
+
+        .resource-types {
+            font-size: 12px;
+            color: #6c757d;
+        }
+        
+        .priority-actions {
+            font-size: 11px;
+            color: #d32f2f;
+            font-weight: 500;
+            max-width: 150px;
+        }
+        
+        .violation-status {
+            font-size: 11px;
+            color: #1976d2;
+            font-weight: 500;
+            max-width: 120px;
+        }
+
+        .checkbox {
+            margin-right: 10px;
+        }
+
+        .status {
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .status.warning {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .status.loading {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .loading-spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 10px;
+        }
+
+        .loading-spinner.hidden {
+            display: none;
+        }
+        
+        .progress-container {
+            margin: 15px 0;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border: 1px solid #e9ecef;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #e9ecef;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-bottom: 10px;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #28a745, #20c997);
+            width: 0%;
+            transition: width 0.3s ease;
+            border-radius: 10px;
+        }
+        
+        .progress-text {
+            text-align: center;
+            font-weight: 600;
+            color: #495057;
+            font-size: 14px;
+        }
+        
+        /* Enhanced Table Styles */
+        .summary-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        
+        .summary-header h3 {
+            margin: 0 0 15px 0;
+            font-size: 24px;
+            font-weight: 600;
+        }
+        
+        .summary-stats {
+            display: flex;
+            gap: 30px;
+            flex-wrap: wrap;
+        }
+        
+        .stat-item {
+            text-align: center;
+        }
+        
+        .stat-number {
+            display: block;
+            font-size: 32px;
+            font-weight: 700;
+            line-height: 1;
+        }
+        
+        .stat-label {
+            display: block;
+            font-size: 14px;
+            opacity: 0.9;
+            margin-top: 5px;
+        }
+        
+        .enhanced-table {
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        }
+        
+        .enhanced-table thead {
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        }
+        
+        .enhanced-table th {
+            padding: 15px 12px;
+            font-weight: 600;
+            color: #495057;
+            border-bottom: 2px solid #dee2e6;
+        }
+        
+        .enhanced-table td {
+            padding: 15px 12px;
+            vertical-align: top;
+            border-bottom: 1px solid #f1f3f4;
+        }
+        
+        .owner-row.high {
+            background-color: #fff5f5;
+            border-left: 4px solid #e53e3e;
+        }
+        
+        .owner-row.medium {
+            background-color: #fffbf0;
+            border-left: 4px solid #f6ad55;
+        }
+        
+        .owner-row.low {
+            background-color: #f0fff4;
+            border-left: 4px solid #68d391;
+        }
+        
+        .owner-info {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        
+        .owner-name {
+            font-weight: 600;
+            color: #2d3748;
+        }
+        
+        .owner-meta {
+            font-size: 12px;
+            color: #718096;
+            font-style: italic;
+        }
+        
+        .violation-count {
+            text-align: center;
+        }
+        
+        .count-badge {
+            font-size: 24px;
+            font-weight: 700;
+            color: #e53e3e;
+            line-height: 1;
+        }
+        
+        .count-label {
+            font-size: 12px;
+            color: #718096;
+            margin-top: 2px;
+        }
+        
+        .policy-item {
+            background: #f7fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 6px 8px;
+            margin: 2px 0;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        
+        .more-policies {
+            font-size: 11px;
+            color: #718096;
+            font-style: italic;
+            margin-top: 4px;
+        }
+        
+        .asset-sample {
+            background: #f1f5f9;
+            border: 1px solid #cbd5e0;
+            border-radius: 4px;
+            padding: 4px 6px;
+            margin: 2px 0;
+            font-size: 11px;
+            font-family: monospace;
+            color: #4a5568;
+        }
+        
+        .more-assets {
+            font-size: 11px;
+            color: #718096;
+            font-style: italic;
+            margin-top: 4px;
+        }
+        
+        .severity {
+            text-align: center;
+        }
+        
+        .simple-summary {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .simple-summary h3 {
+            margin: 0 0 8px 0;
+            color: #495057;
+        }
+        
+        .simple-summary p {
+            margin: 0;
+            color: #6c757d;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .violations-list {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 6px;
+            padding: 15px;
+            margin-top: 10px;
+        }
+
+        .violations-list h4 {
+            color: #856404;
+            margin-bottom: 10px;
+        }
+
+        .violations-list ul {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        .violations-list li {
+            padding: 5px 0;
+            border-bottom: 1px solid #ffeaa7;
+        }
+
+        .violations-list li:last-child {
+            border-bottom: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Firefly EOL Automation</h1>
+            <p>Automate End-of-Life framework notifications and resource management</p>
+        </div>
+
+        <div class="content">
+            <!-- Step 1: Authentication -->
+            <div class="step" id="auth-step">
+                <h2>Step 1: Authentication</h2>
+                <div class="form-group">
+                    <label for="accessKey">Access Key:</label>
+                    <input type="text" id="accessKey" placeholder="Enter your Firefly access key">
+                </div>
+                <div class="form-group">
+                    <label for="secretKey">Secret Key:</label>
+                    <input type="password" id="secretKey" placeholder="Enter your Firefly secret key">
+                </div>
+                <button class="btn" onclick="authenticate()">
+                    <span id="auth-spinner" class="loading-spinner hidden"></span>
+                    Authenticate
+                </button>
+                <div id="auth-status"></div>
+            </div>
+
+
+            <!-- Step 2: Resource Aggregation -->
+            <div class="step hidden" id="resources-step">
+                <h2>Step 2: Resource Aggregation</h2>
+                <button class="btn" onclick="fetchResources()">
+                    <span id="resources-spinner" class="loading-spinner hidden"></span>
+                    Fetch Resources by Owner
+                </button>
+                <div id="resources-status"></div>
+                <div id="resources-progress" class="progress-container hidden">
+                    <div class="progress-bar">
+                        <div id="progress-fill" class="progress-fill"></div>
+                    </div>
+                    <div id="progress-text" class="progress-text">0%</div>
+                </div>
+                <div id="resources-table"></div>
+            </div>
+
+            <!-- Step 3: EOL Violations -->
+            <div class="step hidden" id="violations-step">
+                <h2>Step 3: EOL Framework Violations</h2>
+                <button class="btn" onclick="fetchViolations()">
+                    <span id="violations-spinner" class="loading-spinner hidden"></span>
+                    Identify EOL Violations
+                </button>
+                <div id="violations-status"></div>
+                <div id="violations-display"></div>
+            </div>
+
+            <!-- Step 3: Notifications -->
+            <div class="step hidden" id="notifications-step">
+                <h2>Step 3: Send Notifications</h2>
+                <p>Select owners to notify about EOL violations:</p>
+                <div id="owners-selection"></div>
+                <button class="btn" onclick="sendNotifications()" id="send-btn" disabled>
+                    <span id="notifications-spinner" class="loading-spinner hidden"></span>
+                    Send Notifications
+                </button>
+                <div id="notifications-status"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let accessToken = null;
+        let resourcesData = null;
+        let violationsData = null;
+        let ownersData = {};
+        let selectedOwners = [];
+        let isProcessing = false;
+        
+        // Performance optimization: Cache for API responses
+        const apiCache = new Map();
+        const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+        
+        // Cache management functions
+        function getCachedData(key) {
+            const cached = apiCache.get(key);
+            if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+                return cached.data;
+            }
+            return null;
+        }
+        
+        function setCachedData(key, data) {
+            apiCache.set(key, {
+                data: data,
+                timestamp: Date.now()
+            });
+        }
+
+        async function checkTokenStatus() {
+            try {
+                const response = await fetch('/api/token-status');
+                const data = await response.json();
+                
+                if (data.valid && data.accessToken) {
+                    // Token is valid, use the actual cached token
+                    accessToken = data.accessToken;
+                    document.getElementById('auth-status').innerHTML = '<div class="status success">Using cached authentication!</div>';
+                    
+                    // Update step numbers for cached user (skip auth step)
+                    document.getElementById('resources-step').querySelector('h2').textContent = 'Step 1: Resource Aggregation';
+                    document.getElementById('notifications-step').querySelector('h2').textContent = 'Step 2: Select Owners';
+                    // Keep button text clean - no step number in button
+                    
+                    // Show resources step directly
+                    document.getElementById('resources-step').classList.remove('hidden');
+                    // Hide auth form since we have a valid token
+                    document.getElementById('auth-step').style.display = 'none';
+                    return true;
+                }
+            } catch (error) {
+                console.log('No valid cached token found');
+            }
+            return false;
+        }
+
+        async function authenticate() {
+            const accessKey = document.getElementById('accessKey').value;
+            const secretKey = document.getElementById('secretKey').value;
+            const spinner = document.getElementById('auth-spinner');
+            const status = document.getElementById('auth-status');
+
+            console.log('Access Key:', accessKey ? 'Present' : 'Missing');
+            console.log('Secret Key:', secretKey ? 'Present' : 'Missing');
+
+            if (!accessKey || !secretKey) {
+                status.innerHTML = '<div class="status error">Please enter both access key and secret key</div>';
+                return;
+            }
+
+            spinner.classList.remove('hidden');
+            status.innerHTML = '<div class="status loading">Authenticating...</div>';
+
+            try {
+                const response = await fetch('/api/auth', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ accessKey, secretKey })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    accessToken = data.accessToken;
+                    status.innerHTML = '<div class="status success">Authentication successful!</div>';
+                    
+                    // Update step numbers for new user
+                    document.getElementById('resources-step').querySelector('h2').textContent = 'Step 2: Resource Aggregation';
+                    document.getElementById('notifications-step').querySelector('h2').textContent = 'Step 3: Select Owners';
+                    
+                    // Show resources step directly
+                    document.getElementById('resources-step').classList.remove('hidden');
+                } else {
+                    status.innerHTML = `<div class="status error">Authentication failed: ${data.error || 'Unknown error'}</div>`;
+                }
+            } catch (error) {
+                console.error('Authentication error:', error);
+                const errorMessage = error.response?.data?.error || error.message || 'Authentication failed';
+                status.innerHTML = `<div class="status error">
+                    <strong>❌ Authentication Error:</strong> ${errorMessage}
+                    <br><small>Please check your API credentials and try again.</small>
+                </div>`;
+            } finally {
+                spinner.classList.add('hidden');
+            }
+        }
+
+
+        // Check for cached token on page load
+        window.addEventListener('load', async () => {
+            // Hide all loading spinners on page load first
+            document.querySelectorAll('.loading-spinner').forEach(spinner => {
+                spinner.classList.add('hidden');
+            });
+            await checkTokenStatus();
+        });
+
+        async function fetchResources() {
+            if (isProcessing) return;
+            isProcessing = true;
+            
+            const spinner = document.getElementById('resources-spinner');
+            const status = document.getElementById('resources-status');
+            const progress = document.getElementById('resources-progress');
+            const progressFill = document.getElementById('progress-fill');
+            const progressText = document.getElementById('progress-text');
+            const table = document.getElementById('resources-table');
+
+            spinner.classList.remove('hidden');
+            progress.classList.remove('hidden');
+            status.innerHTML = `<div class="status loading">Analyzing EOL violations...</div>`;
+            
+            // Initialize progress
+            updateProgress(0, 'Starting analysis...');
+
+            try {
+                // Simulate progress updates during the API call
+                let progress = 0;
+                const progressInterval = setInterval(() => {
+                    progress += Math.random() * 3; // Slower, more realistic progress
+                    if (progress > 90) progress = 90; // Don't complete until done
+                    updateProgress(progress, 'Fetching EOL violations...');
+                }, 500);
+                // Add timeout to prevent hanging
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minute timeout
+                
+                const response = await fetch('/api/inventory/sample', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ accessToken }),
+                    signal: controller.signal
+                });
+                
+                clearTimeout(timeoutId);
+
+                const data = await response.json();
+                
+                // Clear progress interval and complete progress
+                clearInterval(progressInterval);
+                updateProgress(100, 'Analysis complete!');
+
+                if (response.ok) {
+                    // Handle EOL violations response
+                    resourcesData = { responseObjects: [], owners: data.owners };
+                    const statusMessage = `<div class="status success">EOL Analysis complete! Found ${data.uniqueOwners} owners with violations</div>`;
+                    status.innerHTML = statusMessage;
+                    
+                    // Display owners with EOL violations
+                    displayOwnersFromEolViolations(data.owners, data.violations);
+                    document.getElementById('notifications-step').classList.remove('hidden');
+                } else {
+                    status.innerHTML = `<div class="status error">Failed to fetch resources: ${data.error || 'Unknown error'}</div>`;
+                }
+            } catch (error) {
+                const errorMessage = error.response?.data?.error || error.message || 'An unexpected error occurred';
+                status.innerHTML = `<div class="status error">
+                    <strong>❌ Error:</strong> ${errorMessage}
+                    <br><small>Please try again or contact support if the issue persists.</small>
+                </div>`;
+            } finally {
+                spinner.classList.add('hidden');
+                progress.classList.add('hidden');
+                isProcessing = false;
+            }
+        }
+
+        function updateProgress(percentage, message) {
+            const progressFill = document.getElementById('progress-fill');
+            const progressText = document.getElementById('progress-text');
+            
+            if (progressFill && progressText) {
+                progressFill.style.width = percentage + '%';
+                progressText.textContent = `${Math.round(percentage)}% - ${message}`;
+            }
+        }
+
+        function aggregateResourcesByOwner(data) {
+            // Process the inventory data and group by owner
+            const owners = {};
+            
+            if (data.responseObjects) {
+                data.responseObjects.forEach(asset => {
+                    const owner = asset.owner || 'Unknown';
+                    if (!owners[owner]) {
+                        owners[owner] = [];
+                    }
+                    owners[owner].push({
+                        name: asset.name,
+                        type: asset.assetType,
+                        id: asset.assetId,
+                        region: asset.region,
+                        provider: asset.providerId
+                    });
+                });
+            }
+            
+            return owners;
+        }
+
+        function displayResourcesTable(owners) {
+            const table = document.getElementById('resources-table');
+            let html = '<table class="table"><thead><tr><th>Select</th><th>Owner</th><th>Resource Count</th><th>Resource Types</th><th>EOL Violations</th></tr></thead><tbody>';
+            
+            // Convert to array and sort by resource count
+            const ownersArray = Object.keys(owners).map(owner => ({
+                owner,
+                count: owners[owner].length,
+                types: [...new Set(owners[owner].map(r => r.type))]
+            })).sort((a, b) => b.count - a.count);
+            
+            ownersArray.forEach(ownerData => {
+                const ownerEmail = ownerData.owner;
+                const resourceCount = ownerData.count;
+                const resourceTypes = ownerData.types.join(', ');
+                
+                html += `<tr>
+                    <td><input type="checkbox" class="checkbox" data-owner="${ownerEmail}" onchange="updateSelectedOwners()"></td>
+                    <td class="owner-email">${ownerEmail}</td>
+                    <td class="resource-count">${resourceCount.toLocaleString()}</td>
+                    <td class="resource-types">${resourceTypes}</td>
+                    <td><span class="status warning">Check EOL violations</span></td>
+                </tr>`;
+            });
+            
+            html += '</tbody></table>';
+            table.innerHTML = html;
+            
+            // Store owners data for later use
+            ownersData = owners;
+        }
+
+        function displayOwnersFromSample(owners) {
+            const table = document.getElementById('resources-table');
+            let html = '<table class="table"><thead><tr><th>Select</th><th>Owner</th><th>Resource Count</th><th>Resource Types</th><th>EOL Violations</th></tr></thead><tbody>';
+            
+            // Sort owners by EOL violations first, then by resource count
+            owners.sort((a, b) => {
+                if (b.violations !== a.violations) {
+                    return b.violations - a.violations;
+                }
+                return b.count - a.count;
+            });
+            
+            owners.forEach(ownerData => {
+                const ownerEmail = ownerData.owner;
+                const resourceCount = ownerData.count;
+                const resourceTypes = ownerData.types.join(', ');
+                const violations = ownerData.violations || 0;
+                const violationTypes = ownerData.violationTypes || [];
+                
+                let violationDisplay;
+                if (violations > 0) {
+                    violationDisplay = `<span class="status error">${violations} violations</span><br><small>${violationTypes.slice(0, 2).join(', ')}${violationTypes.length > 2 ? '...' : ''}</small>`;
+                } else {
+                    violationDisplay = '<span class="status success">No violations</span>';
+                }
+                
+                html += `<tr>
+                    <td><input type="checkbox" class="checkbox" data-owner="${ownerEmail}" onchange="updateSelectedOwners()"></td>
+                    <td class="owner-email">${ownerEmail}</td>
+                    <td class="resource-count">${resourceCount.toLocaleString()}</td>
+                    <td class="resource-types">${resourceTypes}</td>
+                    <td>${violationDisplay}</td>
+                </tr>`;
+            });
+            
+            html += '</tbody></table>';
+            table.innerHTML = html;
+            
+            // Store owners data for later use
+            ownersData = {};
+            owners.forEach(ownerData => {
+                ownersData[ownerData.owner] = Array(ownerData.count).fill({ type: ownerData.types[0] || 'unknown' });
+            });
+        }
+
+    function displayOwnersFromEolViolations(owners, violations) {
+        const table = document.getElementById('resources-table');
+
+        // Simple summary
+        const totalViolations = owners.reduce((sum, owner) => sum + (owner.violations || 0), 0);
+        const totalOwners = owners.length;
+
+        let html = `
+            <div class="simple-summary">
+                <h3>EOL Violations Found</h3>
+                <p><strong>${totalOwners}</strong> owner(s) with <strong>${totalViolations.toLocaleString()}</strong> violating assets</p>
+            </div>
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th><input type="checkbox" id="select-all" onchange="toggleSelectAll()"> Select All</th>
+                        <th>Owner</th>
+                        <th>Violating Assets</th>
+                        <th>EOL Policy Violations</th>
+                    </tr>
+                </thead>
+                <tbody>`;
+
+        // Sort owners by violations first, then by asset count
+        owners.sort((a, b) => {
+            if (b.violations !== a.violations) {
+                return b.violations - a.violations;
+            }
+            return b.count - a.count;
+        });
+
+        owners.forEach(ownerData => {
+            const ownerEmail = ownerData.owner;
+            const violationTypes = ownerData.violationTypes || [];
+            const violations = ownerData.violations || 0;
+            const violatingAssets = ownerData.violatingAssets || [];
+
+
+            // Create simple EOL policy violations display with asset types
+            const violationTypeCounts = ownerData.violationTypeCounts || {};
+            const policyViolations = [];
+            
+            // Get asset types for this owner
+            const assetTypes = ownerData.types || [];
+            const topAssetTypes = assetTypes.slice(0, 3).join(', ');
+            
+            // Process each violation type with count and asset types
+            violationTypes.forEach(violation => {
+                const count = violationTypeCounts[violation] || 1;
+                let policyName = '';
+                
+                // Clean up policy names
+                if (violation.includes('Imminent')) {
+                    policyName = `🚨 Imminent EOL (<3 months)`;
+                } else if (violation.includes('Ended')) {
+                    policyName = `⚠️ Ended EOL`;
+                } else if (violation.includes('Upcoming')) {
+                    policyName = `📅 Upcoming EOL (3-9 months)`;
+                } else if (violation.includes('Deprecated')) {
+                    policyName = `🔧 Deprecated Runtime`;
+                } else {
+                    policyName = `📋 ${violation}`;
+                }
+                
+                policyViolations.push(`${policyName}: ${count} assets (${topAssetTypes})`);
+            });
+            
+            const policyDisplay = policyViolations.join('<br>');
+
+            html += `<tr>
+                <td><input type="checkbox" class="checkbox" data-owner="${ownerEmail}" onchange="updateSelectedOwners()"></td>
+                <td class="owner-email">${ownerEmail}</td>
+                <td class="resource-count">${violations.toLocaleString()}</td>
+                <td class="policy-violations">${policyDisplay}</td>
+            </tr>`;
+        });
+
+        html += '</tbody></table>';
+        table.innerHTML = html;
+
+        // Store owners data for later use
+        ownersData = {};
+        owners.forEach(ownerData => {
+            ownersData[ownerData.owner] = {
+                resources: ownerData.violatingAssets.map(asset => ({ name: asset, type: 'violating' })),
+                violationTypes: ownerData.violationTypes || [],
+                violationTypeCounts: ownerData.violationTypeCounts || {},
+                violations: ownerData.violations || 0,
+                types: ownerData.types || []
+            };
+        });
+    }
+
+        async function fetchViolations() {
+            const spinner = document.getElementById('violations-spinner');
+            const status = document.getElementById('violations-status');
+            const display = document.getElementById('violations-display');
+
+            spinner.classList.remove('hidden');
+            status.innerHTML = '<div class="status loading">Fetching EOL violations...</div>';
+
+            try {
+                const response = await fetch('/api/governance/insights', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ 
+                        accessToken,
+                        frameworks: ["EOL"],
+                        onlyMatchingAssets: true
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    violationsData = data;
+                    status.innerHTML = '<div class="status success">EOL violations identified!</div>';
+                    displayViolations(data);
+                    document.getElementById('notifications-step').classList.remove('hidden');
+                } else {
+                    status.innerHTML = `<div class="status error">Failed to fetch violations: ${data.error || 'Unknown error'}</div>`;
+                }
+            } catch (error) {
+                const errorMessage = error.response?.data?.error || error.message || 'An unexpected error occurred';
+                status.innerHTML = `<div class="status error">
+                    <strong>❌ Error:</strong> ${errorMessage}
+                    <br><small>Please try again or contact support if the issue persists.</small>
+                </div>`;
+            } finally {
+                spinner.classList.add('hidden');
+            }
+        }
+
+        function displayViolations(data) {
+            const display = document.getElementById('violations-display');
+            let html = '<h3>EOL Framework Violations:</h3>';
+            
+            if (data.hits) {
+                data.hits.forEach(insight => {
+                    html += `<div class="violations-list">
+                        <h4>${insight.name}</h4>
+                        <p><strong>Severity:</strong> ${insight.severity} | <strong>Category:</strong> ${insight.category}</p>
+                        <p><strong>Description:</strong> ${insight.description}</p>
+                        <p><strong>Total Assets:</strong> ${insight.total_assets} | <strong>Asset Types:</strong> ${insight.type.join(', ')}</p>
+                        <p><strong>Providers:</strong> ${insight.providers.join(', ')}</p>
+                        ${insight.badge ? `<p><strong>Badge:</strong> ${insight.badge}</p>` : ''}
+                    </div>`;
+                });
+            }
+            
+            display.innerHTML = html;
+        }
+
+        function updateSelectedOwners() {
+            const checkboxes = document.querySelectorAll('.checkbox:checked');
+            const sendBtn = document.getElementById('send-btn');
+            
+            if (checkboxes.length > 0) {
+                sendBtn.disabled = false;
+            } else {
+                sendBtn.disabled = true;
+            }
+        }
+
+        function getSelectedOwners() {
+            const checkboxes = document.querySelectorAll('.checkbox:checked');
+            return Array.from(checkboxes).map(cb => cb.dataset.owner);
+        }
+
+        function toggleSelectAll() {
+            const selectAllCheckbox = document.getElementById('select-all');
+            const checkboxes = document.querySelectorAll('.checkbox');
+            
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = selectAllCheckbox.checked;
+            });
+            
+            updateSelectedOwners();
+        }
+
+    async function sendNotifications() {
+        const selectedOwners = getSelectedOwners();
+        const status = document.getElementById('notifications-status');
+        const spinner = document.getElementById('notifications-spinner');
+        
+        if (selectedOwners.length === 0) {
+            status.innerHTML = '<div class="status error">Please select at least one owner</div>';
+            return;
+        }
+        
+        spinner.classList.remove('hidden');
+        status.innerHTML = '<div class="status loading">Generating email notifications...</div>';
+        
+        // Optimized email generation with better performance
+        const generateEmailContent = async () => {
+            const timeout = setTimeout(() => {
+                spinner.classList.add('hidden');
+                status.innerHTML = '<div class="status error">Email generation timed out. Please try again.</div>';
+            }, 10000);
+            
+            // Pre-build common elements
+            const emailHeader = `<div class="status success">
+                <h4>📧 Email Notifications Ready</h4>
+                <p><strong>Selected owners:</strong> ${selectedOwners.length}</p>
+                <p><strong>Status:</strong> Email content generated (SMTP integration pending)</p>`;
+            
+            const violationExplanations = {
+                'Imminent': '🚨 Imminent EOL (<3 months)',
+                'Ended': '⚠️ Ended EOL',
+                'Upcoming': '📅 Upcoming EOL (3-9 months)',
+                'Deprecated': '🔧 Deprecated Runtime'
+            };
+            
+            // Process owners with optimized batch processing
+            const ownerEmails = [];
+            for (let i = 0; i < selectedOwners.length; i++) {
+                const owner = selectedOwners[i];
+                const ownerData = ownersData[owner];
+                
+                if (!ownerData || !ownerData.resources || !ownerData.resources.length) continue;
+                
+                const ownerResources = ownerData.resources;
+                const violationTypes = ownerData.violationTypes || [];
+                const violationTypeCounts = ownerData.violationTypeCounts || {};
+                
+                // Process violation details
+                
+                // Optimized violation details building
+                const violationDetails = violationTypes.length > 0 ? violationTypes.map(violation => {
+                    const count = violationTypeCounts[violation] || 1;
+                    const matchingKey = Object.keys(violationExplanations).find(key => violation.includes(key));
+                    const explanation = matchingKey ? violationExplanations[matchingKey] : `📋 ${violation}`;
+                    return `• ${explanation}: ${count} assets`;
+                }).join('<br>') : `• No specific violation types found for this owner`;
+                
+                // Optimized resource list (limit to 5 for performance)
+                const sampleResources = ownerResources.slice(0, 5);
+                const resourceList = sampleResources.map(resource => `• ${resource.name}`).join('<br>') +
+                    (ownerResources.length > 5 ? `<br>• ... and ${ownerResources.length - 5} more resources` : '');
+                
+                // Build email content for this owner
+                const ownerEmailContent = `<details style="margin-top: 15px;">
+                    <summary style="cursor: pointer; font-weight: bold; padding: 10px; background: #f8f9fa; border-radius: 5px;">
+                        📧 Email for ${owner} (${ownerResources.length} violations)
+                    </summary>
+                    <div style="background: #ffffff; border: 1px solid #dee2e6; border-radius: 8px; padding: 20px; margin-top: 10px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-size: 14px; line-height: 1.6;">
+                        <div style="border-bottom: 1px solid #dee2e6; padding-bottom: 10px; margin-bottom: 20px;">
+                            <strong style="color: #495057; font-size: 16px;">📧 EMAIL PREVIEW</strong>
+                        </div>
+                        
+                        <div style="margin-bottom: 15px;">
+                            <strong>To:</strong> ${owner}<br>
+                            <strong>From:</strong> lior@firefly.ai<br>
+                            <strong>Subject:</strong> <span style="color: #dc3545; font-weight: bold;">Action Required – EOL Resource Violations in Firefly</span>
+                        </div>
+                        
+                        <div style="background: #f8f9fa; border: 1px solid #dee2e6; padding: 20px; margin: 15px 0;">
+                            <h2 style="margin: 0 0 10px 0; font-size: 18px; color: #dc3545;">🚨 End-of-Life Violations Detected</h2>
+                            <p style="margin: 0; font-size: 16px; color: #495057;">You have <strong>${ownerResources.length}</strong> resources that require immediate attention due to End-of-Life (EOL) policy violations.</p>
+                        </div>
+                        
+                        <div style="background: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
+                            <strong style="color: #495057; font-size: 16px;">📊 Impact Summary</strong><br>
+                            <div style="margin-top: 10px;">
+                                <div style="display: inline-block; background: #e9ecef; color: #495057; padding: 8px 12px; border: 1px solid #dee2e6; margin-right: 10px; font-weight: bold;">
+                                    ${ownerResources.length} Resources
+                                </div>
+                                <div style="display: inline-block; background: #e9ecef; color: #495057; padding: 8px 12px; border: 1px solid #dee2e6; font-weight: bold;">
+                                    ${ownerResources.length > 0 ? [...new Set(ownerResources.map(r => r.type))].length : 0} Types
+                                </div>
+                            </div>
+                            <div style="margin-top: 10px; color: #6c757d;">
+                                <strong>Resource Types:</strong> ${ownerResources.length > 0 ? [...new Set(ownerResources.map(r => r.type))].join(', ') : 'N/A'}
+                            </div>
+                        </div>
+                        
+                        <div style="margin: 15px 0;">
+                            <strong style="color: #495057; font-size: 16px;">⚠️ Policy Violations</strong><br>
+                            <div style="margin-top: 10px; padding: 15px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px;">
+                                ${violationDetails}
+                            </div>
+                        </div>
+                        
+                        <div style="margin: 15px 0;">
+                            <strong style="color: #495057; font-size: 16px;">🔍 Affected Resources</strong><br>
+                            <div style="margin-top: 10px; background: #f8f9fa; padding: 15px; border-radius: 5px; border: 1px solid #dee2e6;">
+                                ${resourceList}
+                            </div>
+                        </div>
+                        
+                        <div style="background: #f8f9fa; border: 1px solid #dee2e6; padding: 20px; margin: 20px 0;">
+                            <h3 style="margin: 0 0 15px 0; font-size: 16px; color: #495057;">🎯 Required Actions</h3>
+                            <div style="background: white; padding: 15px; border: 1px solid #dee2e6; border-radius: 5px;">
+                                <div style="margin-bottom: 10px;">
+                                    <strong>1. 🔗 Access Governance Dashboard</strong><br>
+                                    <a href="https://app.firefly.ai/governance" target="_blank" style="color: #007bff; text-decoration: underline;">https://app.firefly.ai/governance</a>
+                                </div>
+                                <div style="margin-bottom: 10px;">
+                                    <strong>2. 📋 Review Violations</strong><br>
+                                    Examine each resource and determine remediation strategy
+                                </div>
+                                <div style="margin-bottom: 10px;">
+                                    <strong>3. 🔧 Take Action</strong><br>
+                                    Update, migrate, or decommission resources based on EOL status
+                                </div>
+                                <div>
+                                    <strong>4. ⏰ Timeline</strong><br>
+                                    Address critical violations (Ended/Imminent) within 48 hours
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div style="background: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0; border: 1px solid #dee2e6;">
+                            <strong style="color: #495057;">💡 Need Help?</strong><br>
+                            <div style="margin-top: 5px; color: #6c757d;">
+                                • Contact the Firefly team for assistance with remediation<br>
+                                • Review our EOL policy documentation for guidance<br>
+                                • Schedule a consultation for complex migration scenarios
+                            </div>
+                        </div>
+                        
+                        <div style="margin-top: 20px; padding-top: 15px; border-top: 1px solid #dee2e6; text-align: center;">
+                            <div style="color: #6c757d; font-size: 12px; margin-bottom: 5px;">Best regards,</div>
+                            <div style="font-weight: bold; color: #495057;">The Firefly Team</div>
+                            <div style="color: #6c757d; font-size: 12px; margin-top: 5px;">Firefly Governance & Compliance</div>
+                        </div>
+                    </div>
+                </details>`;
+                
+                // Add to owner emails array
+                ownerEmails.push(ownerEmailContent);
+                
+                // Update progress and yield control back to the browser after each owner
+                if (i % 5 === 0) { // Update progress every 5 owners
+                    status.innerHTML = `<div class="status loading">Generating email notifications... (${i + 1}/${selectedOwners.length} owners processed)</div>`;
+                    await new Promise(resolve => requestAnimationFrame(resolve));
+                }
+            }
+            
+            // Build final email content
+            const finalEmailContent = emailHeader + ownerEmails.join('') + 
+                `<div style="background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 8px; padding: 15px; margin-top: 20px;">
+                    <strong>💡 Integration Status:</strong> Email content is ready. SMTP configuration will be added to enable actual email sending.
+                </div></div>`;
+            
+            clearTimeout(timeout);
+            spinner.classList.add('hidden');
+            status.innerHTML = finalEmailContent;
+        };
+        
+        // Start the email content generation
+        generateEmailContent();
+    }
+    </script>
+</body>
+</html>
