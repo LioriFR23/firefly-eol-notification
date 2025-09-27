@@ -2,6 +2,8 @@
 
 Simple web app to find EOL violations and send notifications to resource owners.
 
+**Author:** Lior Friedman
+
 ## Quick Start
 
 ```bash
