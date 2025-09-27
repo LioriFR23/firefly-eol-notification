@@ -2,6 +2,12 @@
 
 A lightweight local web application that leverages Firefly's API to automate End-of-Life (EOL) framework notifications and resource management.
 
+## ⚡ **INSTANT START**
+```bash
+./start.sh
+```
+**Just run this command - everything else is automatic!** 🚀
+
 ## Features
 
 - **🔐 Secure Authentication**: Encrypted token caching with automatic expiry checking
@@ -31,20 +37,36 @@ A lightweight local web application that leverages Firefly's API to automate End
 - **Filters**: `frameworks: ["EOL"]`, `onlyMatchingAssets: true`
 - **Response**: Array of `hits` with violation details, severity levels, and affected assets
 
-## Installation & Setup
+## 🚀 Quick Start (Zero Setup Required!)
 
-### Quick Setup (Recommended)
+### **Just Run This:**
 ```bash
-# Clone or download the project
-cd firefly-eol-automation
-
-# Start the application (auto-installs dependencies)
 ./start.sh
 ```
 
-### Super Quick Start
+**That's it!** The script automatically:
+- ✅ Checks Node.js installation
+- ✅ Installs all dependencies
+- ✅ Starts the server
+- ✅ Opens browser to `http://localhost:3000`
+
+### **What You Need:**
+- **Node.js 14+** (download from [nodejs.org](https://nodejs.org/))
+- **Internet connection** (for dependency installation)
+
+### **First Time Setup:**
 ```bash
-# One command to rule them all
+# 1. Clone the repository
+git clone https://github.com/LioriFR23/firefly-eol-notification.git
+cd firefly-eol-notification
+
+# 2. Run the application (auto-installs everything)
+./start.sh
+```
+
+### **Every Other Time:**
+```bash
+# Just run this - everything is automatic!
 ./start.sh
 ```
 
