@@ -240,27 +240,47 @@
         
         .progress-container {
             margin: 15px 0;
-            padding: 15px;
+            padding: 20px;
             background: #f8f9fa;
-            border-radius: 8px;
-            border: 1px solid #e9ecef;
+            border-radius: 12px;
+            border: 1px solid #dee2e6;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
         
         .progress-bar {
             width: 100%;
-            height: 20px;
+            height: 24px;
             background: #e9ecef;
-            border-radius: 10px;
+            border-radius: 12px;
             overflow: hidden;
-            margin-bottom: 10px;
+            margin-bottom: 12px;
+            box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);
         }
         
         .progress-fill {
             height: 100%;
-            background: linear-gradient(90deg, #28a745, #20c997);
+            background: linear-gradient(90deg, #007bff, #28a745);
             width: 0%;
-            transition: width 0.3s ease;
-            border-radius: 10px;
+            transition: width 0.4s ease;
+            border-radius: 12px;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .progress-fill::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+            animation: shimmer 2s infinite;
+        }
+        
+        @keyframes shimmer {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
         }
         
         .progress-text {
@@ -677,16 +697,28 @@
             status.innerHTML = `<div class="status loading">Analyzing EOL violations...</div>`;
             
             // Initialize progress
-            updateProgress(0, 'Starting analysis...');
+            updateProgress(0, 'Initializing EOL analysis...');
 
             try {
-                // Simulate progress updates during the API call
-                let progress = 0;
-                const progressInterval = setInterval(() => {
-                    progress += Math.random() * 3; // Slower, more realistic progress
-                    if (progress > 90) progress = 90; // Don't complete until done
-                    updateProgress(progress, 'Fetching EOL violations...');
-                }, 500);
+            // Simulate progress updates during the API call
+            let progress = 0;
+            const progressMessages = [
+                'Connecting to Firefly API...',
+                'Fetching governance policies...',
+                'Analyzing EOL violations...',
+                'Processing asset data...',
+                'Mapping violations to owners...',
+                'Finalizing analysis...'
+            ];
+            
+            const progressInterval = setInterval(() => {
+                progress += Math.random() * 2; // More realistic progress increment
+                if (progress > 85) progress = 85; // Don't complete until done
+                
+                const messageIndex = Math.floor((progress / 85) * progressMessages.length);
+                const message = progressMessages[Math.min(messageIndex, progressMessages.length - 1)];
+                updateProgress(progress, message);
+            }, 400);
                 // Add timeout to prevent hanging
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minute timeout
@@ -739,7 +771,17 @@
             
             if (progressFill && progressText) {
                 progressFill.style.width = percentage + '%';
-                progressText.textContent = `${Math.round(percentage)}% - ${message}`;
+                const roundedPercentage = Math.round(percentage);
+                progressText.textContent = `${roundedPercentage}% - ${message}`;
+                
+                // Add visual feedback for different stages
+                if (roundedPercentage < 30) {
+                    progressFill.style.background = 'linear-gradient(90deg, #007bff, #0056b3)';
+                } else if (roundedPercentage < 70) {
+                    progressFill.style.background = 'linear-gradient(90deg, #17a2b8, #138496)';
+                } else {
+                    progressFill.style.background = 'linear-gradient(90deg, #28a745, #20c997)';
+                }
             }
         }
 
