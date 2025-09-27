@@ -10,10 +10,35 @@ if ! command -v node &> /dev/null; then
     exit 1
 fi
 
+# Check if npm is installed
+if ! command -v npm &> /dev/null; then
+    echo "❌ npm is not installed. Please install Node.js (which includes npm):"
+    echo "   Visit: https://nodejs.org/"
+    exit 1
+fi
+
+# Check Node.js version (requires 14+)
+NODE_VERSION=$(node -v | cut -d'v' -f2 | cut -d'.' -f1)
+if [ "$NODE_VERSION" -lt 14 ]; then
+    echo "❌ Node.js version 14 or higher is required. Current version: $(node -v)"
+    echo "   Please update Node.js: https://nodejs.org/"
+    exit 1
+fi
+
+echo "✅ Node.js $(node -v) detected"
+
 # Check if dependencies are installed
-if [ ! -d "node_modules" ]; then
+if [ ! -d "node_modules" ] || [ ! -f "node_modules/.package-lock.json" ]; then
     echo "📦 Installing dependencies..."
+    echo "   This may take a few minutes on first run..."
     npm install
+    if [ $? -ne 0 ]; then
+        echo "❌ Failed to install dependencies. Please check your internet connection and try again."
+        exit 1
+    fi
+    echo "✅ Dependencies installed successfully!"
+else
+    echo "✅ Dependencies already installed"
 fi
 
 # Kill any existing server on port 3000
