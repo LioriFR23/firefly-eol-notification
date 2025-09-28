@@ -19,7 +19,7 @@ const TOKEN_FILE = path.join(__dirname, '.tokens.json');
 
 function encrypt(text) {
     const algorithm = 'aes-256-cbc';
-    const key = crypto.scryptSync(process.env.ENCRYPTION_KEY || 'firefly-eol-app-key', 'salt', 32);
+    const key = crypto.scryptSync(process.env.ENCRYPTION_KEY || 'default-encryption-key-change-in-production', 'salt', 32);
     const iv = crypto.randomBytes(16);
     const cipher = crypto.createCipheriv(algorithm, key, iv);
     let encrypted = cipher.update(text, 'utf8', 'hex');
@@ -29,7 +29,7 @@ function encrypt(text) {
 
 function decrypt(encryptedText) {
     const algorithm = 'aes-256-cbc';
-    const key = crypto.scryptSync(process.env.ENCRYPTION_KEY || 'firefly-eol-app-key', 'salt', 32);
+    const key = crypto.scryptSync(process.env.ENCRYPTION_KEY || 'default-encryption-key-change-in-production', 'salt', 32);
     const textParts = encryptedText.split(':');
     const iv = Buffer.from(textParts.shift(), 'hex');
     const encrypted = textParts.join(':');
@@ -151,10 +151,10 @@ const testFireflyAPI = async () => {
   
   try {
     // Step 1: Test Authentication
-    // Testing Authentication
+    // Testing Authentication - using environment variables for security
     const authResponse = await axios.post(`${FIREFLY_BASE_URL}/v2/login`, {
-      accessKey: 'INFLDRBBYMAQORFWMCXC',
-      secretKey: 'etFbVUZlXsEOXFWjHDppkdy7fP0RPQQjyROcj3Nf1Jj7bLbn6K9D835bNOhToLeH'
+      accessKey: process.env.FIREFLY_ACCESS_KEY || 'your-access-key-here',
+      secretKey: process.env.FIREFLY_SECRET_KEY || 'your-secret-key-here'
     });
     
     // Authentication successful
@@ -809,6 +809,53 @@ app.post('/api/send-emails', async (req, res) => {
     
   } catch (error) {
     console.error('Demo notification error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// CSV Export endpoint
+app.post('/api/export-csv', async (req, res) => {
+  try {
+    const { ownersData, violationsData } = req.body;
+    
+    if (!ownersData || ownersData.length === 0) {
+      return res.status(400).json({ error: 'No data to export' });
+    }
+    
+    // Prepare CSV data
+    const csvData = ownersData.map(owner => ({
+      owner: owner.owner,
+      violation_count: owner.violations,
+      asset_count: owner.count,
+      asset_types: owner.types.join('; '),
+      violation_types: owner.violationTypes.join('; '),
+      violating_assets: owner.violatingAssets.join('; ')
+    }));
+    
+    // Create CSV content
+    const csvContent = [
+      // Header row
+      'Owner Email,Total Violations,Asset Count,Asset Types,Violation Types,Violating Assets',
+      // Data rows
+      ...csvData.map(row => [
+        `"${row.owner}"`,
+        row.violation_count,
+        row.asset_count,
+        `"${row.asset_types}"`,
+        `"${row.violation_types}"`,
+        `"${row.violating_assets}"`
+      ].join(','))
+    ].join('\n');
+    
+    // Set headers for CSV download
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="eol-violations-${new Date().toISOString().split('T')[0]}.csv"`);
+    
+    // Send CSV content
+    res.send(csvContent);
+    
+  } catch (error) {
+    console.error('CSV export error:', error);
     res.status(500).json({ error: error.message });
   }
 });

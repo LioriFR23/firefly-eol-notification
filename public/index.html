@@ -551,13 +551,19 @@
 
             <!-- Step 3: Notifications -->
             <div class="step hidden" id="notifications-step">
-                <h2>Step 3: Send Notifications</h2>
-                <p>Select owners to notify about EOL violations:</p>
+                <h2>Step 3: Export & Notifications</h2>
+                <p>Select owners to notify about EOL violations or export data:</p>
                 <div id="owners-selection"></div>
-                <button class="btn" onclick="sendNotifications()" id="send-btn" disabled>
-                    <span id="notifications-spinner" class="loading-spinner hidden"></span>
-                    Send Notifications
-                </button>
+                <div style="display: flex; gap: 15px; margin-top: 20px;">
+                    <button class="btn" onclick="exportToCSV()" id="export-btn" disabled>
+                        <span id="export-spinner" class="loading-spinner hidden"></span>
+                        📊 Export CSV
+                    </button>
+                    <button class="btn" onclick="sendNotifications()" id="send-btn" disabled>
+                        <span id="notifications-spinner" class="loading-spinner hidden"></span>
+                        📧 Send Notifications
+                    </button>
+                </div>
                 <div id="notifications-status"></div>
             </div>
         </div>
@@ -1043,11 +1049,19 @@
         function updateSelectedOwners() {
             const checkboxes = document.querySelectorAll('.checkbox:checked');
             const sendBtn = document.getElementById('send-btn');
+            const exportBtn = document.getElementById('export-btn');
             
             if (checkboxes.length > 0) {
                 sendBtn.disabled = false;
             } else {
                 sendBtn.disabled = true;
+            }
+            
+            // CSV export is always available if we have data
+            if (ownersData && Object.keys(ownersData).length > 0) {
+                exportBtn.disabled = false;
+            } else {
+                exportBtn.disabled = true;
             }
         }
 
@@ -1066,6 +1080,64 @@
             
             updateSelectedOwners();
         }
+
+    async function exportToCSV() {
+        const status = document.getElementById('notifications-status');
+        const spinner = document.getElementById('export-spinner');
+        
+        if (!ownersData || Object.keys(ownersData).length === 0) {
+            status.innerHTML = '<div class="status error">No data available to export</div>';
+            return;
+        }
+        
+        spinner.classList.remove('hidden');
+        status.innerHTML = '<div class="status loading">Preparing CSV export...</div>';
+        
+        try {
+            // Convert ownersData object to array format for CSV export
+            const ownersArray = Object.keys(ownersData).map(owner => ({
+                owner: owner,
+                violations: ownersData[owner].violations || 0,
+                count: ownersData[owner].resources ? ownersData[owner].resources.length : 0,
+                types: ownersData[owner].types || [],
+                violationTypes: ownersData[owner].violationTypes || [],
+                violatingAssets: ownersData[owner].resources ? ownersData[owner].resources.map(r => r.name) : []
+            }));
+            
+            const response = await fetch('/api/export-csv', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    ownersData: ownersArray,
+                    violationsData: violationsData
+                })
+            });
+            
+            if (response.ok) {
+                // Create download link
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `eol-violations-${new Date().toISOString().split('T')[0]}.csv`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                
+                status.innerHTML = '<div class="status success">CSV exported successfully!</div>';
+            } else {
+                const errorData = await response.json();
+                status.innerHTML = `<div class="status error">Export failed: ${errorData.error || 'Unknown error'}</div>`;
+            }
+        } catch (error) {
+            status.innerHTML = `<div class="status error">Export failed: ${error.message}</div>`;
+        } finally {
+            spinner.classList.add('hidden');
+        }
+    }
 
     async function sendNotifications() {
         const selectedOwners = getSelectedOwners();
