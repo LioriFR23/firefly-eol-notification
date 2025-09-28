@@ -21,13 +21,14 @@ That's it! Opens at `http://localhost:3000`
 
 1. **Login** - Enter your Firefly API keys
 2. **Scan** - Finds all EOL violations and groups by owner  
-3. **Notify** - Generate email templates for owners
+3. **Export** - Download CSV or generate email templates
 
 ## Features
 
 - Finds EOL violations across all your resources
 - Groups violations by owner
-- Generates email templates
+- Export data to CSV
+- Generate email templates
 - No data stored locally (except encrypted tokens)
 
 ## Clear Cache
