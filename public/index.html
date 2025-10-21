@@ -896,12 +896,13 @@
 
         // Simple summary
         const totalViolations = owners.reduce((sum, owner) => sum + (owner.violations || 0), 0);
+        const totalAssets = owners.reduce((sum, owner) => sum + (owner.count || 0), 0);
         const totalOwners = owners.length;
 
         let html = `
             <div class="simple-summary">
                 <h3>EOL Violations Found</h3>
-                <p><strong>${totalOwners}</strong> owner(s) with <strong>${totalViolations.toLocaleString()}</strong> violating assets</p>
+                <p><strong>${totalOwners}</strong> owner(s) with <strong>${totalAssets.toLocaleString()}</strong> violating assets</p>
             </div>
             <table class="table">
                 <thead>
@@ -963,7 +964,7 @@
             html += `<tr>
                 <td><input type="checkbox" class="checkbox" data-owner="${ownerEmail}" onchange="updateSelectedOwners()"></td>
                 <td class="owner-email">${ownerEmail}</td>
-                <td class="resource-count">${violations.toLocaleString()}</td>
+                <td class="resource-count">${ownerData.count.toLocaleString()}</td>
                 <td class="policy-violations">${policyDisplay}</td>
             </tr>`;
         });

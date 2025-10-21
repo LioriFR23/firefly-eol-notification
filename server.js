@@ -859,32 +859,62 @@ app.post('/api/export-csv', async (req, res) => {
       console.log(`📊 Filtering CSV export: ${filteredOwners.length} selected owners out of ${ownersData.length} total`);
     }
     
-    // Prepare CSV data with resource IDs/ARNs (no email addresses)
-    const csvData = filteredOwners.map(owner => {
-      return {
-        system_name: owner.owner, // This is the tag value (e.g., "Artifactory")
-        violation_count: owner.violations,
-        asset_count: owner.count,
-        asset_types: owner.types.join('; '),
-        violation_types: owner.violationTypes.join('; '),
-        violating_assets: owner.violatingAssets.join('; '),
-        resource_arns: (owner.assetArns || []).join('; ')
-      };
+    // Prepare CSV data - one row per asset instead of aggregated
+    const csvData = [];
+    
+    filteredOwners.forEach(owner => {
+      const assetArns = owner.assetArns || [];
+      const violatingAssets = owner.violatingAssets || [];
+      const violationTypes = owner.violationTypes || [];
+      
+      console.log(`📊 Processing owner: ${owner.owner}`);
+      console.log(`   - Asset ARNs: ${assetArns.length}`);
+      console.log(`   - Violating Assets: ${violatingAssets.length}`);
+      console.log(`   - Violation Types: ${violationTypes.length}`);
+      
+      // Create one row per asset - ensure we have exactly the same number of rows as assets
+      assetArns.forEach((arn, index) => {
+        const assetName = violatingAssets[index] || `Asset ${index + 1}`;
+        
+        // Get violation type for this specific asset - prioritize by severity
+        let violationType = 'Unknown';
+        if (violationTypes && violationTypes.length > 0) {
+          // Priority order: Ended > Imminent > Upcoming
+          const priorityOrder = ['Ended', 'Imminent', 'Upcoming'];
+          let selectedType = null;
+          
+          // Find the highest priority violation type available
+          for (const priority of priorityOrder) {
+            const matchingType = violationTypes.find(type => type.includes(priority));
+            if (matchingType) {
+              selectedType = matchingType;
+              break;
+            }
+          }
+          
+          // If no priority match found, use the first available type
+          violationType = selectedType || violationTypes[0] || 'Unknown';
+        }
+        
+        csvData.push({
+          team_name: owner.owner,
+          asset_name: assetName,
+          asset_arn: arn,
+          violation_type: violationType
+        });
+      });
     });
     
     // Create CSV content
     const csvContent = [
-      // Header row
-      'Team Name,Total Violations,Asset Count,Asset Types,Violation Types,Violating Assets,Resource ARNs',
+      // Header row - simplified
+      'Team Name,Asset Name,Asset ARN,Violation Type',
       // Data rows
       ...csvData.map(row => [
-        `"${row.system_name}"`,
-        row.violation_count,
-        row.asset_count,
-        `"${row.asset_types}"`,
-        `"${row.violation_types}"`,
-        `"${row.violating_assets}"`,
-        `"${row.resource_arns}"`
+        `"${row.team_name}"`,
+        `"${row.asset_name}"`,
+        `"${row.asset_arn}"`,
+        `"${row.violation_type}"`
       ].join(','))
     ].join('\n');
     
