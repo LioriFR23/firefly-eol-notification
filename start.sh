@@ -56,4 +56,17 @@ echo "   👉 http://127.0.0.1:3000"
 echo ""
 echo "💡 You can click the links above to open the application directly!"
 echo ""
-NODE_ENV=production npm start
+# Start server with environment variables but hide all output
+FIREFLY_ACCESS_KEY="INFLJBSKNYNDVCTIJWHZ" FIREFLY_SECRET_KEY="G9PovGBdEWPzGDKVhX3Q4NgFM1CV462LrNWjWrUgvdqU7zMXHf7twMGGssIOxOpm" NODE_ENV=production node server.js > /dev/null 2>&1 &
+
+# Wait a moment for server to start
+sleep 2
+
+# Check if server is running
+if curl -s http://localhost:3000 > /dev/null 2>&1; then
+    echo "✅ Server started successfully!"
+    echo "🌐 Application is ready at: http://localhost:3000"
+else
+    echo "❌ Server failed to start. Check for errors."
+    exit 1
+fi

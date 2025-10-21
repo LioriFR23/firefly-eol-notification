@@ -73,41 +73,55 @@ function isTokenExpired(tokenData) {
 // Firefly API configuration
 const FIREFLY_BASE_URL = 'https://api.firefly.ai';
 
-// Helper function to extract owner information from asset
-function extractOwner(asset) {
-  // The inventory API should return the owner field as an email
-  if (asset.owner && typeof asset.owner === 'string' && asset.owner.trim() !== '') {
-    const trimmedOwner = asset.owner.trim();
-    // Check if it's a valid email
-    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-    if (emailRegex.test(trimmedOwner)) {
-      return trimmedOwner;
+// Helper function to extract tag value from asset (replacing owner email logic)
+function extractTagValue(asset, tagKey = 'appsflyer.com/system') {
+  // First, try to get from tfObject.tags (most reliable)
+  if (asset.tfObject && asset.tfObject.tags && asset.tfObject.tags[tagKey]) {
+    const tagValue = asset.tfObject.tags[tagKey];
+    if (tagValue && typeof tagValue === 'string' && tagValue.trim() !== '') {
+      return tagValue.trim();
     }
   }
   
-  // If no valid owner email found, return null to exclude this asset
+  // Fallback to tfObject.tags_all
+  if (asset.tfObject && asset.tfObject.tags_all && asset.tfObject.tags_all[tagKey]) {
+    const tagValue = asset.tfObject.tags_all[tagKey];
+    if (tagValue && typeof tagValue === 'string' && tagValue.trim() !== '') {
+      return tagValue.trim();
+    }
+  }
+  
+  // Fallback to tagsList array (parse from "key: value" format)
+  if (asset.tagsList && Array.isArray(asset.tagsList)) {
+    for (const tagItem of asset.tagsList) {
+      if (typeof tagItem === 'string' && tagItem.includes(':')) {
+        const [key, ...valueParts] = tagItem.split(':');
+        if (key.trim() === tagKey) {
+          const value = valueParts.join(':').trim();
+          if (value !== '') {
+            return value;
+          }
+        }
+      }
+    }
+  }
+  
+  // If no valid tag value found, return null to exclude this asset
   return null;
 }
 
-// Helper function to validate if an owner is a real email or name
-function isValidOwner(owner) {
+// Helper function to validate if a tag value is valid (replacing owner validation)
+function isValidTagValue(tagValue) {
   // Must not be empty
-  if (!owner || owner.trim() === '') return false;
+  if (!tagValue || tagValue.trim() === '') return false;
   
-  // Check if it's a valid email address
-  const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-  if (emailRegex.test(owner)) return true;
+  const trimmedValue = tagValue.trim();
   
-  // Check if it's a reasonable name (2+ words, no special chars, not too long)
-  const nameRegex = /^[a-zA-Z\s]{2,50}$/;
-  if (nameRegex.test(owner) && owner.split(' ').length >= 2) return true;
+  // Allow reasonable system names (letters, numbers, spaces, hyphens, underscores)
+  const systemNameRegex = /^[a-zA-Z0-9\s\-_]{1,100}$/;
+  if (systemNameRegex.test(trimmedValue)) return true;
   
-  // Allow accountId as a valid owner (12+ character alphanumeric strings)
-  // Account IDs are typically long alphanumeric strings, often 12 digits for AWS
-  const accountIdRegex = /^[a-zA-Z0-9]{12,64}$/; // Adjust regex as needed for other providers
-  if (accountIdRegex.test(owner)) return true;
-  
-  // Reject technical IDs, tokens, and system names (but allow account IDs)
+  // Reject technical IDs, tokens, and system names that are too generic
   const technicalPatterns = [
     /^[0-9]+$/,  // Pure numbers
     /^[a-f0-9]{8,}$/i,  // Hex strings
@@ -118,14 +132,19 @@ function isValidOwner(owner) {
     /^k8s-/,  // Kubernetes resources
     /^[a-z]+-[a-z]+-[0-9]+/,  // Pattern like "eks-dev-euw1-12345"
     /^[0-9]{10,}$/,  // Long numbers
-    /^[a-zA-Z0-9_-]{20,}$/  // Long alphanumeric strings (but not account IDs)
+    /^[a-zA-Z0-9_-]{20,}$/,  // Long alphanumeric strings
+    /^unknown$/i,  // Unknown values
+    /^n\/a$/i,  // N/A values
+    /^none$/i,  // None values
+    /^null$/i,  // Null values
+    /^undefined$/i  // Undefined values
   ];
   
   for (const pattern of technicalPatterns) {
-    if (pattern.test(owner)) return false;
+    if (pattern.test(trimmedValue)) return false;
   }
   
-  return false;
+  return true;
 }
 
 // Email configuration
@@ -550,16 +569,16 @@ app.post('/api/inventory/sample', async (req, res) => {
 
         // Found total violating assets across policies
     
-        // Extract actual owners from assets using the extractOwner function
+        // Extract actual tag values from assets using the extractTagValue function
         const processedAssets = violatingAssets
           .map(asset => {
-            const owner = extractOwner(asset);
+            const tagValue = extractTagValue(asset, 'appsflyer.com/system');
             return {
               ...asset,
-              owner: owner
+              owner: tagValue  // Using 'owner' field to maintain compatibility with existing logic
             };
           })
-          .filter(asset => asset.owner !== null); // Only include assets with valid owners
+          .filter(asset => asset.owner !== null && isValidTagValue(asset.owner)); // Only include assets with valid tag values
     
     // Processed assets with extracted owners
     
@@ -608,23 +627,23 @@ app.post('/api/inventory/sample', async (req, res) => {
     
     successfulResults.forEach(({ violation, assets }) => {
       assets.forEach(asset => {
-        // Try multiple fields to find the owner
-        const owner = extractOwner(asset);
+        // Extract tag value instead of owner email
+        const tagValue = extractTagValue(asset, 'appsflyer.com/system');
         
-        // Log owner extraction for debugging
-        if (owner.includes('Unassigned')) {
-          // No owner found for asset
+        // Skip assets without valid tag values
+        if (!tagValue || !isValidTagValue(tagValue)) {
+          return;
         }
         
-        if (!ownerAssets[owner]) {
-          ownerAssets[owner] = {};
+        if (!ownerAssets[tagValue]) {
+          ownerAssets[tagValue] = {};
         }
         
         // Use asset ID as unique key to avoid counting same asset multiple times
         const assetKey = asset.assetId || asset.name || `${asset.assetType}-${Math.random()}`;
         
-        if (!ownerAssets[owner][assetKey]) {
-          ownerAssets[owner][assetKey] = {
+        if (!ownerAssets[tagValue][assetKey]) {
+          ownerAssets[tagValue][assetKey] = {
             asset: asset,
             violationTypes: new Set()
           };
@@ -636,7 +655,7 @@ app.post('/api/inventory/sample', async (req, res) => {
           cleanViolationName = cleanViolationName.split(' - ')[0];
         }
         cleanViolationName = cleanViolationName.trim();
-        ownerAssets[owner][assetKey].violationTypes.add(cleanViolationName);
+        ownerAssets[tagValue][assetKey].violationTypes.add(cleanViolationName);
         
       });
     });
@@ -650,7 +669,9 @@ app.post('/api/inventory/sample', async (req, res) => {
           violations: 0,
           violationTypes: new Set(),
           violationTypeCounts: {},
-          violatingAssets: new Set()
+          violatingAssets: new Set(),
+          assetArns: new Set(),
+          originalOwner: null
         };
       }
       
@@ -664,10 +685,19 @@ app.post('/api/inventory/sample', async (req, res) => {
           ownerStats[owner].violations++;
         });
         
-        // Store asset with type information
+        // Store asset with type information and ARN
         const assetName = asset.name || asset.assetId || 'Unknown Asset';
         const assetType = asset.assetType || 'Unknown Type';
+        const assetArn = asset.arn || asset.resourceId || asset.assetId || 'No ARN';
         ownerStats[owner].violatingAssets.add(`${assetName} (${assetType})`);
+        
+        // Store ARN separately for CSV export
+        ownerStats[owner].assetArns.add(assetArn);
+        
+        // Store original owner information (from asset.owner field) - only if not already set
+        if (asset.owner && asset.owner.trim() !== '' && !ownerStats[owner].originalOwner) {
+          ownerStats[owner].originalOwner = asset.owner.trim();
+        }
         
         // Track asset types
         if (asset.assetType) {
@@ -689,22 +719,22 @@ app.post('/api/inventory/sample', async (req, res) => {
     // Convert to array format and filter out owners with no violations
     const allOwners = Object.keys(ownerStats).map(owner => ({
       owner,
+      originalOwner: ownerStats[owner].originalOwner || 'No Owner', // Store original owner info
       count: ownerStats[owner].count,
       types: Array.from(ownerStats[owner].types),
       violations: ownerStats[owner].violations,
       violationTypes: Array.from(ownerStats[owner].violationTypes),
       violationTypeCounts: ownerStats[owner].violationTypeCounts,
-      violatingAssets: Array.from(ownerStats[owner].violatingAssets)
+      violatingAssets: Array.from(ownerStats[owner].violatingAssets),
+      assetArns: Array.from(ownerStats[owner].assetArns || [])
     }));
     
-    // Filter out owners with violations below threshold and unassigned resources (spam reduction)
+    // Filter out tag values with violations below threshold (spam reduction)
     const owners = allOwners.filter(owner => 
-      owner.violations >= minViolations && 
-      !owner.owner.includes('Unassigned')
+      owner.violations >= minViolations
     );
     
     const filteredOut = allOwners.length - owners.length;
-    const unassignedFiltered = allOwners.filter(owner => owner.owner.includes('Unassigned')).length;
     
     // Filtered out owners below threshold
     
@@ -816,34 +846,45 @@ app.post('/api/send-emails', async (req, res) => {
 // CSV Export endpoint
 app.post('/api/export-csv', async (req, res) => {
   try {
-    const { ownersData, violationsData } = req.body;
+    const { ownersData, violationsData, selectedOwners } = req.body;
     
     if (!ownersData || ownersData.length === 0) {
       return res.status(400).json({ error: 'No data to export' });
     }
     
-    // Prepare CSV data
-    const csvData = ownersData.map(owner => ({
-      owner: owner.owner,
-      violation_count: owner.violations,
-      asset_count: owner.count,
-      asset_types: owner.types.join('; '),
-      violation_types: owner.violationTypes.join('; '),
-      violating_assets: owner.violatingAssets.join('; ')
-    }));
+    // Filter owners if specific owners are selected
+    let filteredOwners = ownersData;
+    if (selectedOwners && selectedOwners.length > 0) {
+      filteredOwners = ownersData.filter(owner => selectedOwners.includes(owner.owner));
+      console.log(`📊 Filtering CSV export: ${filteredOwners.length} selected owners out of ${ownersData.length} total`);
+    }
+    
+    // Prepare CSV data with resource IDs/ARNs (no email addresses)
+    const csvData = filteredOwners.map(owner => {
+      return {
+        system_name: owner.owner, // This is the tag value (e.g., "Artifactory")
+        violation_count: owner.violations,
+        asset_count: owner.count,
+        asset_types: owner.types.join('; '),
+        violation_types: owner.violationTypes.join('; '),
+        violating_assets: owner.violatingAssets.join('; '),
+        resource_arns: (owner.assetArns || []).join('; ')
+      };
+    });
     
     // Create CSV content
     const csvContent = [
       // Header row
-      'Owner Email,Total Violations,Asset Count,Asset Types,Violation Types,Violating Assets',
+      'Team Name,Total Violations,Asset Count,Asset Types,Violation Types,Violating Assets,Resource ARNs',
       // Data rows
       ...csvData.map(row => [
-        `"${row.owner}"`,
+        `"${row.system_name}"`,
         row.violation_count,
         row.asset_count,
         `"${row.asset_types}"`,
         `"${row.violation_types}"`,
-        `"${row.violating_assets}"`
+        `"${row.violating_assets}"`,
+        `"${row.resource_arns}"`
       ].join(','))
     ].join('\n');
     
@@ -869,7 +910,30 @@ app.get('/', (req, res) => {
 const server = app.listen(PORT, async () => {
   console.log(`🚀 Firefly EOL Automation Server running on http://localhost:${PORT}`);
   console.log(`📱 Open your browser and navigate to: http://localhost:${PORT}`);
-  console.log(`🔐 Enter your Firefly API keys to begin`);
+  
+  // Check if API keys are provided via environment variables
+  if (process.env.FIREFLY_ACCESS_KEY && process.env.FIREFLY_SECRET_KEY) {
+    console.log(`🔐 Using API keys from environment variables`);
+    try {
+      // Auto-authenticate with environment variables
+      const authResponse = await axios.post(`${FIREFLY_BASE_URL}/v2/login`, {
+        accessKey: process.env.FIREFLY_ACCESS_KEY,
+        secretKey: process.env.FIREFLY_SECRET_KEY
+      });
+      
+      const tokenData = {
+        ...authResponse.data,
+        createdAt: Math.floor(Date.now() / 1000)
+      };
+      saveToken(tokenData);
+      console.log(`✅ Auto-authentication successful`);
+    } catch (error) {
+      console.log(`⚠️  Auto-authentication failed: ${error.message}`);
+      console.log(`🔐 Please enter your Firefly API keys manually`);
+    }
+  } else {
+    console.log(`🔐 Enter your Firefly API keys to begin`);
+  }
   
   // Test the API with provided keys (only in development mode)
   if (process.env.NODE_ENV === 'development' || process.argv.includes('--test')) {

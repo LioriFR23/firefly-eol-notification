@@ -979,7 +979,8 @@
                 violationTypes: ownerData.violationTypes || [],
                 violationTypeCounts: ownerData.violationTypeCounts || {},
                 violations: ownerData.violations || 0,
-                types: ownerData.types || []
+                types: ownerData.types || [],
+                assetArns: ownerData.assetArns || []
             };
         });
     }
@@ -1101,8 +1102,12 @@
                 count: ownersData[owner].resources ? ownersData[owner].resources.length : 0,
                 types: ownersData[owner].types || [],
                 violationTypes: ownersData[owner].violationTypes || [],
-                violatingAssets: ownersData[owner].resources ? ownersData[owner].resources.map(r => r.name) : []
+                violatingAssets: ownersData[owner].resources ? ownersData[owner].resources.map(r => r.name) : [],
+                assetArns: ownersData[owner].assetArns || []
             }));
+            
+            // Get selected owners for filtering
+            const selectedOwners = getSelectedOwners();
             
             const response = await fetch('/api/export-csv', {
                 method: 'POST',
@@ -1111,7 +1116,8 @@
                 },
                 body: JSON.stringify({
                     ownersData: ownersArray,
-                    violationsData: violationsData
+                    violationsData: violationsData,
+                    selectedOwners: selectedOwners
                 })
             });
             
