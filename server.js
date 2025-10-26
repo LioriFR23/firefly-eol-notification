@@ -73,7 +73,7 @@ function isTokenExpired(tokenData) {
 // Firefly API configuration
 const FIREFLY_BASE_URL = 'https://api.firefly.ai';
 
-// Helper function to extract tag value from asset (replacing owner email logic)
+// Helper function to extract system tag value from asset for grouping EOL violations
 function extractTagValue(asset, tagKey = 'appsflyer.com/system') {
   // First, try to get from tfObject.tags (most reliable)
   if (asset.tfObject && asset.tfObject.tags && asset.tfObject.tags[tagKey]) {
@@ -110,18 +110,18 @@ function extractTagValue(asset, tagKey = 'appsflyer.com/system') {
   return null;
 }
 
-// Helper function to validate if a tag value is valid (replacing owner validation)
+// Helper function to validate if a tag value is valid for system grouping
 function isValidTagValue(tagValue) {
   // Must not be empty
   if (!tagValue || tagValue.trim() === '') return false;
   
   const trimmedValue = tagValue.trim();
   
-  // Allow reasonable system names (letters, numbers, spaces, hyphens, underscores)
-  const systemNameRegex = /^[a-zA-Z0-9\s\-_]{1,100}$/;
+  // Allow reasonable system names (letters, numbers, spaces, hyphens, underscores, dots)
+  const systemNameRegex = /^[a-zA-Z0-9\s\-_.]{1,100}$/;
   if (systemNameRegex.test(trimmedValue)) return true;
   
-  // Reject technical IDs, tokens, and system names that are too generic
+  // Reject technical IDs and generic values that aren't meaningful system names
   const technicalPatterns = [
     /^[0-9]+$/,  // Pure numbers
     /^[a-f0-9]{8,}$/i,  // Hex strings
@@ -627,7 +627,7 @@ app.post('/api/inventory/sample', async (req, res) => {
     
     successfulResults.forEach(({ violation, assets }) => {
       assets.forEach(asset => {
-        // Extract tag value instead of owner email
+        // Extract system tag value for grouping EOL violations
         const tagValue = extractTagValue(asset, 'appsflyer.com/system');
         
         // Skip assets without valid tag values
