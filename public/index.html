@@ -118,6 +118,20 @@
             transform: none;
         }
 
+        .button-group {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .btn-secondary {
+            background: linear-gradient(135deg, #6c757d 0%, #495057 100%);
+        }
+
+        .btn-secondary:hover {
+            background: linear-gradient(135deg, #5a6268 0%, #3d4449 100%);
+        }
+
         .table {
             width: 100%;
             border-collapse: collapse;
@@ -513,10 +527,15 @@
                     <label for="secretKey">Secret Key:</label>
                     <input type="password" id="secretKey" placeholder="Enter your Firefly secret key">
                 </div>
-                <button class="btn" onclick="authenticate()">
-                    <span id="auth-spinner" class="loading-spinner hidden"></span>
-                    Authenticate
-                </button>
+                <div class="button-group">
+                    <button class="btn" onclick="authenticate()">
+                        <span id="auth-spinner" class="loading-spinner hidden"></span>
+                        Authenticate
+                    </button>
+                    <button class="btn btn-secondary" onclick="clearCache()">
+                        Clear Cache
+                    </button>
+                </div>
                 <div id="auth-status"></div>
             </div>
 
@@ -647,7 +666,7 @@
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({ accessKey, secretKey })
+                    body: JSON.stringify({ accessKey, secretKey, forceRefresh: true })
                 });
 
                 const data = await response.json();
@@ -677,6 +696,35 @@
             }
         }
 
+        async function clearCache() {
+            const status = document.getElementById('auth-status');
+            status.innerHTML = '<div class="status loading">Clearing cache...</div>';
+            
+            try {
+                const response = await fetch('/api/clear-cache', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    status.innerHTML = '<div class="status success">Cache cleared successfully! Please enter new credentials.</div>';
+                    // Clear the input fields
+                    document.getElementById('accessKey').value = '';
+                    document.getElementById('secretKey').value = '';
+                    // Reset accessToken
+                    accessToken = null;
+                } else {
+                    status.innerHTML = `<div class="status error">Failed to clear cache: ${data.error || 'Unknown error'}</div>`;
+                }
+            } catch (error) {
+                console.error('Clear cache error:', error);
+                status.innerHTML = `<div class="status error">Error clearing cache: ${error.message}</div>`;
+            }
+        }
 
         // Check for cached token on page load
         window.addEventListener('load', async () => {

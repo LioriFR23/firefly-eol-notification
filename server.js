@@ -60,6 +60,17 @@ function loadToken() {
     return null;
 }
 
+function clearToken() {
+    try {
+        if (fs.existsSync(TOKEN_FILE)) {
+            fs.unlinkSync(TOKEN_FILE);
+            console.log('Token cache cleared');
+        }
+    } catch (error) {
+        console.error('Error clearing token:', error);
+    }
+}
+
 function isTokenExpired(tokenData) {
     if (!tokenData || !tokenData.expiresAt) return true;
     
@@ -319,13 +330,25 @@ app.get('/api/test-governance', async (req, res) => {
 // API Routes
 app.post('/api/auth', async (req, res) => {
   try {
-    const { accessKey, secretKey } = req.body;
+    const { accessKey, secretKey, forceRefresh = false } = req.body;
     
-    // Check if we have a valid cached token first
-    const cachedToken = loadToken();
-    if (cachedToken && !isTokenExpired(cachedToken)) {
-      // Using cached token
-      return res.json(cachedToken);
+    // If forceRefresh is true or no keys provided, clear cache first
+    if (forceRefresh || !accessKey || !secretKey) {
+      clearToken();
+    }
+    
+    // Check if we have a valid cached token first (only if not forcing refresh)
+    if (!forceRefresh) {
+      const cachedToken = loadToken();
+      if (cachedToken && !isTokenExpired(cachedToken)) {
+        // Using cached token
+        return res.json(cachedToken);
+      }
+    }
+    
+    // Validate that we have keys for authentication
+    if (!accessKey || !secretKey) {
+      return res.status(400).json({ error: 'Access key and secret key are required' });
     }
     
     const response = await axios.post(`${FIREFLY_BASE_URL}/v2/login`, {
@@ -361,6 +384,17 @@ app.get('/api/token-status', (req, res) => {
   } catch (error) {
     console.error('Token status error:', error);
     res.json({ valid: false });
+  }
+});
+
+// Clear token cache
+app.post('/api/clear-cache', (req, res) => {
+  try {
+    clearToken();
+    res.json({ success: true, message: 'Cache cleared successfully' });
+  } catch (error) {
+    console.error('Clear cache error:', error);
+    res.status(500).json({ error: 'Failed to clear cache' });
   }
 });
 

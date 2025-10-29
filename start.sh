@@ -56,8 +56,8 @@ echo "   👉 http://127.0.0.1:3000"
 echo ""
 echo "💡 You can click the links above to open the application directly!"
 echo ""
-# Start server with environment variables but hide all output
-FIREFLY_ACCESS_KEY="INFLJBSKNYNDVCTIJWHZ" FIREFLY_SECRET_KEY="G9PovGBdEWPzGDKVhX3Q4NgFM1CV462LrNWjWrUgvdqU7zMXHf7twMGGssIOxOpm" NODE_ENV=production node server.js > /dev/null 2>&1 &
+# Start server without hardcoded keys - user will enter them via web interface
+NODE_ENV=production node server.js > /dev/null 2>&1 &
 
 # Wait a moment for server to start
 sleep 2
