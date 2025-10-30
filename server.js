@@ -121,6 +121,92 @@ function extractTagValue(asset, tagKey = 'appsflyer.com/system') {
   return null;
 }
 
+// Extract all tags that start with appsflyer.com/ from an asset
+function extractAppsFlyerTags(asset) {
+  const result = {};
+
+  // Helper to merge keys with prefix
+  const mergePrefixed = (obj) => {
+    if (!obj) return;
+    Object.keys(obj).forEach((key) => {
+      if (typeof key === 'string' && key.startsWith('appsflyer.com/')) {
+        const val = obj[key];
+        if (val !== undefined && val !== null && String(val).trim() !== '') {
+          result[key] = String(val).trim();
+        }
+      }
+    });
+  };
+
+  // Prefer tfObject.tags
+  if (asset.tfObject && asset.tfObject.tags) {
+    mergePrefixed(asset.tfObject.tags);
+  }
+
+  // Fallback tfObject.tags_all
+  if (asset.tfObject && asset.tfObject.tags_all) {
+    mergePrefixed(asset.tfObject.tags_all);
+  }
+
+  // Fallback tagsList like "key: value"
+  if (asset.tagsList && Array.isArray(asset.tagsList)) {
+    asset.tagsList.forEach((tagItem) => {
+      if (typeof tagItem === 'string' && tagItem.includes(':')) {
+        const [rawKey, ...valueParts] = tagItem.split(':');
+        const key = rawKey.trim();
+        if (key.startsWith('appsflyer.com/')) {
+          const value = valueParts.join(':').trim();
+          if (value !== '') {
+            result[key] = value;
+          }
+        }
+      }
+    });
+  }
+
+  return result;
+}
+
+// Derive a single Team name from appsflyer.com/* tags
+// Preference order can be tuned; we fall back to the first available value
+function getTeamNameFromAppsFlyerTags(asset) {
+  const tags = extractAppsFlyerTags(asset);
+  const preferenceOrder = [
+    'appsflyer.com/system',
+    'appsflyer.com/team',
+    'appsflyer.com/service',
+    'appsflyer.com/component',
+    'appsflyer.com/app',
+  ];
+
+  for (const key of preferenceOrder) {
+    if (tags[key] && isValidTagValue(tags[key])) {
+      return tags[key];
+    }
+  }
+
+  // Fallback: first appsflyer tag value
+  const firstEntry = Object.values(tags)[0];
+  if (firstEntry && isValidTagValue(firstEntry)) return firstEntry;
+
+  return null;
+}
+
+// Derive Team display as ALL values from appsflyer.com/* tags (deduped, joined)
+function getTeamAllAppsFlyerValues(asset) {
+  const tags = extractAppsFlyerTags(asset);
+  const values = Array.from(new Set(Object.values(tags).map(v => String(v).trim()).filter(v => v)));
+  if (values.length === 0) return null;
+  return values.join('; ');
+}
+
+// Return all unique, validated team values from appsflyer.com/* tags
+function getTeamValuesFromAppsFlyerTags(asset) {
+  const tags = extractAppsFlyerTags(asset);
+  const values = Array.from(new Set(Object.values(tags).map(v => String(v).trim())));
+  return values.filter(v => v && isValidTagValue(v));
+}
+
 // Helper function to validate if a tag value is valid for system grouping
 function isValidTagValue(tagValue) {
   // Must not be empty
@@ -605,14 +691,13 @@ app.post('/api/inventory/sample', async (req, res) => {
     
         // Extract actual tag values from assets using the extractTagValue function
         const processedAssets = violatingAssets
-          .map(asset => {
-            const tagValue = extractTagValue(asset, 'appsflyer.com/system');
-            return {
-              ...asset,
-              owner: tagValue  // Using 'owner' field to maintain compatibility with existing logic
-            };
+          .flatMap(asset => {
+            const teamValues = getTeamValuesFromAppsFlyerTags(asset);
+            if (!teamValues || teamValues.length === 0) return [];
+            // Create one entry per team value (no concatenation)
+            return teamValues.map(team => ({ ...asset, owner: team }));
           })
-          .filter(asset => asset.owner !== null && isValidTagValue(asset.owner)); // Only include assets with valid tag values
+          .filter(asset => asset.owner !== null && isValidTagValue(asset.owner)); // Only include assets with valid team values
     
     // Processed assets with extracted owners
     
@@ -661,8 +746,8 @@ app.post('/api/inventory/sample', async (req, res) => {
     
     successfulResults.forEach(({ violation, assets }) => {
       assets.forEach(asset => {
-        // Extract system tag value for grouping EOL violations
-        const tagValue = extractTagValue(asset, 'appsflyer.com/system');
+        // The processedAssets already expanded per team; here we re-derive a team value guard
+        const tagValue = asset.owner || null;
         
         // Skip assets without valid tag values
         if (!tagValue || !isValidTagValue(tagValue)) {
@@ -705,7 +790,8 @@ app.post('/api/inventory/sample', async (req, res) => {
           violationTypeCounts: {},
           violatingAssets: new Set(),
           assetArns: new Set(),
-          originalOwner: null
+          originalOwner: null,
+          assetDetails: []
         };
       }
       
@@ -727,6 +813,15 @@ app.post('/api/inventory/sample', async (req, res) => {
         
         // Store ARN separately for CSV export
         ownerStats[owner].assetArns.add(assetArn);
+
+        // Store appsflyer.com/* tags per asset for CSV/detail usage
+        const appsflyerTags = extractAppsFlyerTags(asset);
+        ownerStats[owner].assetDetails.push({
+          arn: assetArn,
+          name: assetName,
+          type: assetType,
+          appsflyerTags
+        });
         
         // Store original owner information (from asset.owner field) - only if not already set
         if (asset.owner && asset.owner.trim() !== '' && !ownerStats[owner].originalOwner) {
@@ -760,7 +855,8 @@ app.post('/api/inventory/sample', async (req, res) => {
       violationTypes: Array.from(ownerStats[owner].violationTypes),
       violationTypeCounts: ownerStats[owner].violationTypeCounts,
       violatingAssets: Array.from(ownerStats[owner].violatingAssets),
-      assetArns: Array.from(ownerStats[owner].assetArns || [])
+      assetArns: Array.from(ownerStats[owner].assetArns || []),
+      assetDetails: ownerStats[owner].assetDetails || []
     }));
     
     // Filter out tag values with violations below threshold (spam reduction)
@@ -941,15 +1037,31 @@ app.post('/api/export-csv', async (req, res) => {
     
     // Create CSV content
     const csvContent = [
-      // Header row - simplified
-      'Team Name,Asset Name,Asset ARN,Violation Type',
+      // Header row - include appsflyer tags
+      'Team Name,Asset Name,Asset ARN,Violation Type,Appsflyer Tags',
       // Data rows
-      ...csvData.map(row => [
-        `"${row.team_name}"`,
-        `"${row.asset_name}"`,
-        `"${row.asset_arn}"`,
-        `"${row.violation_type}"`
-      ].join(','))
+      ...csvData.map(row => {
+        // Find tags for this asset if provided by frontend
+        let tagsString = '';
+        if (row.asset_arn && filteredOwners) {
+          const owner = filteredOwners.find(o => (o.assetArns || []).includes(row.asset_arn));
+          if (owner && owner.assetDetails) {
+            const details = owner.assetDetails.find(d => d.arn === row.asset_arn);
+            if (details && details.appsflyerTags) {
+              tagsString = Object.entries(details.appsflyerTags)
+                .map(([k, v]) => `${k}=${String(v).replace(/"/g, '""')}`)
+                .join('; ');
+            }
+          }
+        }
+        return [
+          `"${row.team_name}"`,
+          `"${row.asset_name}"`,
+          `"${row.asset_arn}"`,
+          `"${row.violation_type}"`,
+          `"${tagsString}"`
+        ].join(',');
+      })
     ].join('\n');
     
     // Set headers for CSV download
