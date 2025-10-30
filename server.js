@@ -124,12 +124,16 @@ function extractTagValue(asset, tagKey = 'appsflyer.com/system') {
 // Extract all tags that start with appsflyer.com/ from an asset
 function extractAppsFlyerTags(asset) {
   const result = {};
+  const excludedKeys = new Set([
+    'appsflyer.com/eks-version',
+    'appsflyer.com/eks_cluster_name'
+  ]);
 
   // Helper to merge keys with prefix
   const mergePrefixed = (obj) => {
     if (!obj) return;
     Object.keys(obj).forEach((key) => {
-      if (typeof key === 'string' && key.startsWith('appsflyer.com/')) {
+      if (typeof key === 'string' && key.startsWith('appsflyer.com/') && !excludedKeys.has(key)) {
         const val = obj[key];
         if (val !== undefined && val !== null && String(val).trim() !== '') {
           result[key] = String(val).trim();
@@ -154,7 +158,7 @@ function extractAppsFlyerTags(asset) {
       if (typeof tagItem === 'string' && tagItem.includes(':')) {
         const [rawKey, ...valueParts] = tagItem.split(':');
         const key = rawKey.trim();
-        if (key.startsWith('appsflyer.com/')) {
+        if (key.startsWith('appsflyer.com/') && !excludedKeys.has(key)) {
           const value = valueParts.join(':').trim();
           if (value !== '') {
             result[key] = value;
@@ -1035,33 +1039,17 @@ app.post('/api/export-csv', async (req, res) => {
       });
     });
     
-    // Create CSV content
+    // Create CSV content (no separate appsflyer tags column; team reflects the tag value)
     const csvContent = [
-      // Header row - include appsflyer tags
-      'Team Name,Asset Name,Asset ARN,Violation Type,Appsflyer Tags',
+      // Header row
+      'Team Name,Asset Name,Asset ARN,Violation Type',
       // Data rows
-      ...csvData.map(row => {
-        // Find tags for this asset if provided by frontend
-        let tagsString = '';
-        if (row.asset_arn && filteredOwners) {
-          const owner = filteredOwners.find(o => (o.assetArns || []).includes(row.asset_arn));
-          if (owner && owner.assetDetails) {
-            const details = owner.assetDetails.find(d => d.arn === row.asset_arn);
-            if (details && details.appsflyerTags) {
-              tagsString = Object.entries(details.appsflyerTags)
-                .map(([k, v]) => `${k}=${String(v).replace(/"/g, '""')}`)
-                .join('; ');
-            }
-          }
-        }
-        return [
-          `"${row.team_name}"`,
-          `"${row.asset_name}"`,
-          `"${row.asset_arn}"`,
-          `"${row.violation_type}"`,
-          `"${tagsString}"`
-        ].join(',');
-      })
+      ...csvData.map(row => [
+        `"${row.team_name}"`,
+        `"${row.asset_name}"`,
+        `"${row.asset_arn}"`,
+        `"${row.violation_type}"`
+      ].join(','))
     ].join('\n');
     
     // Set headers for CSV download
