@@ -121,6 +121,15 @@ function extractTagValue(asset, tagKey = 'appsflyer.com/system') {
   return null;
 }
 
+// Get owner from inventory asset: top-level owner, or "owner" tag (any source), else fallback
+const NO_OWNER_LABEL = 'No owner';
+function getOwnerFromInventory(asset) {
+  if (asset.owner != null && String(asset.owner).trim() !== '') return String(asset.owner).trim();
+  const fromTag = extractTagValue(asset, 'owner');
+  if (fromTag) return fromTag;
+  return NO_OWNER_LABEL;
+}
+
 // Extract all tags that start with appsflyer.com/ from an asset
 function extractAppsFlyerTags(asset) {
   const result = {};
@@ -696,15 +705,11 @@ app.post('/api/inventory/sample', async (req, res) => {
 
         // Found total violating assets across policies
     
-        // Extract actual tag values from assets using the extractTagValue function
-        const processedAssets = violatingAssets
-          .flatMap(asset => {
-            const teamValues = getTeamValuesFromAppsFlyerTags(asset);
-            // Include asset even when it has no appsflyer tags (use fallback team so count/export are correct)
-            if (!teamValues || teamValues.length === 0) return [{ ...asset, owner: NO_APPSFLYER_TAGS_TEAM }];
-            return teamValues.map(team => ({ ...asset, owner: team }));
-          })
-          .filter(asset => asset.owner !== null && (asset.owner === NO_APPSFLYER_TAGS_TEAM || isValidTagValue(asset.owner)));
+        // Group by owner from inventory (owner tag or top-level owner field)
+        const processedAssets = violatingAssets.map(asset => ({
+          ...asset,
+          owner: getOwnerFromInventory(asset)
+        }));
     
     // Processed assets with extracted owners
     
@@ -821,16 +826,13 @@ app.post('/api/inventory/sample', async (req, res) => {
         // Store ARN separately for CSV export
         ownerStats[owner].assetArns.add(assetArn);
 
-        // Store appsflyer.com/* tags per asset for CSV/detail usage
-        const appsflyerTags = extractAppsFlyerTags(asset);
         ownerStats[owner].assetDetails.push({
           arn: assetArn,
           name: assetName,
           type: assetType,
-          appsflyerTags
+          owner: asset.owner || NO_OWNER_LABEL
         });
         
-        // Store original owner information (from asset.owner field) - only if not already set
         if (asset.owner && asset.owner.trim() !== '' && !ownerStats[owner].originalOwner) {
           ownerStats[owner].originalOwner = asset.owner.trim();
         }
