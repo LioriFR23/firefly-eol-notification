@@ -204,7 +204,10 @@ function getTeamAllAppsFlyerValues(asset) {
   return values.join('; ');
 }
 
-// Return all unique, validated team values from appsflyer.com/* tags
+// Fallback team name when asset has no appsflyer.com/* tags (so we still show/export the asset)
+const NO_APPSFLYER_TAGS_TEAM = 'No appsflyer tags';
+
+// Return all unique, validated team values from appsflyer.com/* tags; empty array if none
 function getTeamValuesFromAppsFlyerTags(asset) {
   const tags = extractAppsFlyerTags(asset);
   const values = Array.from(new Set(Object.values(tags).map(v => String(v).trim())));
@@ -697,11 +700,11 @@ app.post('/api/inventory/sample', async (req, res) => {
         const processedAssets = violatingAssets
           .flatMap(asset => {
             const teamValues = getTeamValuesFromAppsFlyerTags(asset);
-            if (!teamValues || teamValues.length === 0) return [];
-            // Create one entry per team value (no concatenation)
+            // Include asset even when it has no appsflyer tags (use fallback team so count/export are correct)
+            if (!teamValues || teamValues.length === 0) return [{ ...asset, owner: NO_APPSFLYER_TAGS_TEAM }];
             return teamValues.map(team => ({ ...asset, owner: team }));
           })
-          .filter(asset => asset.owner !== null && isValidTagValue(asset.owner)); // Only include assets with valid team values
+          .filter(asset => asset.owner !== null && (asset.owner === NO_APPSFLYER_TAGS_TEAM || isValidTagValue(asset.owner)));
     
     // Processed assets with extracted owners
     
