@@ -374,7 +374,7 @@
       };
       var aboutToBeDeprecated = function(p) {
         var d = p._daysUntilEos;
-        return d != null && d <= 180;
+        return d != null && d > 0 && d <= 180;
       };
       var rows = [['Segment', 'Policy Name', 'Asset Type', 'Asset Count', 'Severity', 'Badge', 'Days until EOS']];
       lastLoadedPolicies.filter(aboutToBeDeprecated).forEach(function(p) {
@@ -508,6 +508,8 @@
     };
 
     if (loadStoredAuth()) {
+      document.getElementById('accessKey').value = '';
+      document.getElementById('secretKey').value = '';
       document.getElementById('authStatus').textContent = 'Signed in (session restored).';
       document.getElementById('authStatus').className = 'msg-success';
       document.getElementById('btnPolicies').disabled = false;

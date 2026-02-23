@@ -187,7 +187,7 @@ app.post('/api/export-full-csv', async (req, res) => {
       if (!(policy.total_assets > 0)) continue;
       const days = getDaysUntilEos(policy);
       const segment = segmentLabel(days);
-      if (days === null || days > 180) continue;
+      if (days === null || days < 0 || days > 180) continue;
       const pType = policyType(policy);
       let inventoryAfterKey = null;
       let assets = [];
