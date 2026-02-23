@@ -107,30 +107,34 @@ Use this endpoint to get EOL policies and asset counts. This is the primary way 
 
 ## 3. Retrieve violating assets for a policy (inventory)
 
-Use this endpoint to get the actual assets that violate a given EOL policy. You need the policy `name` and `type` from the governance/insights response.
+Use the **v2** inventory endpoint to get assets that violate a given EOL policy. You need the policy `id` (or `_id`) and `type` from the governance/insights response.
 
-**Endpoint:** `POST /api/v1.0/inventory`
+**Primary endpoint:** `POST /v2/api/inventory`
 
-**Request body:**
+**Request body (v2):**
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `assetState` | string | No | e.g. `"managed"`. Recommended for governance. |
-| `assetTypes` | string | No | Asset type from the policy (e.g. `aws_lambda_function`). Restricts to that type. |
-| `governance` | string | No | Exact policy `name` from governance/insights. Returns only assets that violate this policy. |
-| `size` | number | No | Max number of assets to return per request. |
-| `afterKey` | string | No | Pagination cursor from previous inventory response. |
+| `filters.assetState` | string | No | e.g. `"managed"`. |
+| `filters.assetTypes` | string[] | No | Asset type from the policy (e.g. `["aws_lambda_function"]`). |
+| `filters.violatingPoliciesIds` | string[] | No | Policy ID(s) from governance (`policy.id` or `policy._id`). Returns only assets that violate this policy. |
+| `size` | number | No | Max number of assets per request. |
+| `afterKey` | string | No | Pagination cursor from previous response. |
 
-**Example request:**
+**Example request (v2):**
 
 ```json
 {
-  "assetState": "managed",
-  "assetTypes": "aws_lambda_function",
-  "governance": "Upcoming (3-9 months) - AWS Lambda Functions",
+  "filters": {
+    "assetState": "managed",
+    "assetTypes": ["aws_lambda_function"],
+    "violatingPoliciesIds": ["<policy.id from governance>"]
+  },
   "size": 100
 }
 ```
+
+**Fallback (v1):** If v2 returns no assets for a policy (e.g. some Kubernetes policy types), use **POST /api/v1.0/inventory** with `governance` (policy **name**), `assetTypes` (string), `assetState: "managed"`, and `size`. Same response shape (`responseObjects`, `afterKey`).
 
 **Example response (conceptual):**
 
@@ -161,7 +165,7 @@ Firefly also supports managing insights (create/update/delete). These are docume
 
 1. `POST /v2/login` → get token  
 2. `POST /v2/governance/insights` (with optional pagination) → list EOL policies  
-3. For each policy, `POST /api/v1.0/inventory` with `governance` and `assetTypes` → list violating assets  
+3. For each policy, `POST /v2/api/inventory` with `filters.violatingPoliciesIds` (policy id) and `filters.assetTypes` → list violating assets (fallback to `POST /api/v1.0/inventory` with `governance` if v2 returns no results)  
 
 ---
 
@@ -174,6 +178,30 @@ Asset types that are typically supported for EOL insights and inventory filters 
 - **MongoDB Atlas:** `Mongodbatlas_advanced_cluster`
 
 Other types (e.g. `appengine.googleapis.com/Version`, `dataproc.googleapis.com/Cluster`) may not be fully supported; confirm with Firefly if needed.
+
+### 5.1 EOS key field per asset type (inventory metadata)
+
+To map an asset to the policy’s EOS dates (from `description.attributes`), use the following **tfObject** field for the asset type. The policy’s attribute **key** (e.g. `nodejs20.x`, `1.34`, `8.0.42`) must match this value.
+
+| Asset type | EOS key field (tfObject) | Example value |
+|------------|--------------------------|---------------|
+| `aws_lambda_function` | `runtime` | `python3.13`, `nodejs20.x` |
+| `aws_eks_cluster` | `version` | `1.34` |
+| `aws_db_instance` | `engine_version_actual` or `engine_version` | `8.0.42`, `17.7` |
+| `aws_rds_cluster` | `engine_version_actual` or `engine_version` | `8.0.mysql_aurora.3.10.2`, `15.12` |
+| `aws_elasticache_cluster` / `aws_elasticache_replication_group` | `engine_version_actual` or `engine_version` | `6.2.6`, `8.x` |
+| `aws_docdb_cluster` / `aws_docdb_global_cluster` | `engine_version_actual` or `engine_version` | (docdb version) |
+| `aws_glue_job` | `glue_version` | (e.g. 4.0) |
+| `aws_mwaa_environment` | `airflow_version` | (e.g. 2.7) |
+| `aws_emr_cluster` | `version` or runtime/version as returned | — |
+| `google_cloudfunctions_function` | `runtime` | `nodejs20`, `python312` |
+| `google_cloudfunctions2_function` | `runtime` or `service_config.runtime` | — |
+| `google_container_cluster` | `master_version` or `min_master_version` or `node_version` | (e.g. 1.28) |
+| `google_composer_environment` | `config.software_config.image_version` (or `airflow_version`) | — |
+| `google_sql_database_instance` | `database_version` | `POSTGRES_13` |
+| `Mongodbatlas_advanced_cluster` | (confirm from inventory; often `version` or similar) | — |
+
+Use the same field when computing “days until EOS” and placing the asset in the right timeframe (overdue, 0–90 days, 90d–6mo, 6+ months).
 
 ---
 
@@ -210,11 +238,7 @@ Each policy in `hits` has: `name`, `type` (asset type, e.g. `aws_lambda_function
 
 ### Step 3: For each policy, fetch violating assets
 
-- `POST /api/v1.0/inventory` with body:
-  - `assetState`: `"managed"`
-  - `assetTypes`: the policy’s `type` (e.g. `aws_lambda_function`)
-  - `governance`: the policy’s exact `name`
-  - `size`: e.g. `100`
+- **v2:** `POST /v2/api/inventory` with `filters.assetState: "managed"`, `filters.assetTypes: [policy.type]`, `filters.violatingPoliciesIds: [policy.id]`, `size` (e.g. 100). **Fallback v1:** if v2 returns no assets, `POST /api/v1.0/inventory` with `governance` (policy `name`), `assetTypes` (policy type), `assetState: "managed"`, `size`.
 - Use `afterKey` from the response for the next page until done.
 
 Each asset has `arn`, `name`, `assetType`, `owner`, and—for Lambda—`tfObject.runtime` (e.g. `"python3.13"`). Use the policy’s `description` (Section 8) to get that runtime’s EOS date and compute a due date (e.g. EOS − 90 days).
@@ -238,9 +262,9 @@ This flow gives you: list of EOL policies, list of violating assets per policy, 
 After parsing `policy.description` as JSON you get:
 
 - **`title`:** Human-readable text (e.g. “Security patches or other updates are no longer applied…”).
-- **`attributes`:** Array of `{ "key": "<runtime>", "value": <unix_timestamp> }`.
+- **`attributes`:** Array of `{ "key": "<runtime_or_version>", "value": <unix_timestamp> }`.
 
-The **`key`** is the runtime identifier (e.g. `nodejs20.x`, `python3.13`, `java17`). The **`value`** is the **EOS date as a Unix timestamp (seconds)**.
+The **`key`** is the runtime or version identifier. The **`value`** is the **EOS date as a Unix timestamp (seconds)**. Match the key to the correct asset metadata: use **`tfObject.runtime`** for Lambda and similar (e.g. `nodejs20.x`, `python3.13`), and **`tfObject.version`** (or `tfObject.kubernetes_version`) for clusters (e.g. EKS, GKE — keys may be like `1.28`, `1.29`). Using the wrong field will give incorrect or missing EOS dates.
 
 ### Example (parsed)
 
@@ -263,11 +287,11 @@ The **`key`** is the runtime identifier (e.g. `nodejs20.x`, `python3.13`, `java1
 1. Get EOL policies from `POST /v2/governance/insights` (Section 2).
 2. For each policy, parse `description`: `const desc = JSON.parse(policy.description);`.
 3. Build a map: `runtime → EOS date` from `desc.attributes` (convert `value` to a date: `new Date(value * 1000)`).
-4. For each violating asset from inventory, read **`asset.tfObject.runtime`** (e.g. `"python3.13"`).
-5. Look up that runtime in your map to get the **EOS date**.
+4. For each violating asset from inventory, read the **EOS key** from the asset: **`tfObject.runtime`** for Lambda and similar (e.g. `"python3.13"`), **`tfObject.version`** (or `kubernetes_version`) for clusters (e.g. `aws_eks_cluster`, `google_container_cluster`).
+5. Look up that key in your map to get the **EOS date**.
 6. Set **due date = EOS date − 90 days** (or your rule) for ticketing.
 
-So you **can** achieve “look ahead for EOS/EOL” and “due dates 90 days out” with the **current** API by using `description` + `tfObject.runtime`. A first-class field (e.g. `runtimeEosDates`) would simplify this and is recommended for escalation (see internal notes).
+So you **can** achieve “look ahead for EOS/EOL” and “due dates 90 days out” with the **current** API by using `description` and the correct asset metadata (runtime for Lambda, version for clusters). A first-class field (e.g. `runtimeEosDates`) would simplify this and is recommended for escalation (see internal notes).
 
 ---
 

@@ -19,7 +19,7 @@ Summary of gaps between client requirements and current Firefly API/product, for
 ## 2. What we can do today (no escalation)
 
 - **Dynamic EOL policy list:** POST /v2/governance/insights with frameworks EOL, pagination via afterKey.
-- **Violating assets per policy:** POST /api/v1.0/inventory with governance + assetTypes + pagination.
+- **Violating assets per policy:** POST /v2/api/inventory with filters.violatingPoliciesIds + assetTypes + pagination; fallback POST /api/v1.0/inventory with governance when v2 returns no results.
 - **Filtering:** frameworks, onlyMatchingAssets; docs mention labels, category, severity, providersAccounts.
 - **Auth:** JWT via POST /v2/login.
 - **Supported asset types:** Client’s “supported by Firefly” list is aligned (e.g. AWS RDS/Lambda/EKS, GCP functions/Composer/GKE, MongoDB Atlas). No product change needed for those.
@@ -81,7 +81,7 @@ Summary of gaps between client requirements and current Firefly API/product, for
 - **EOS dates:** Only inside **`description`** (JSON string with `attributes: [{ key, value }]`, value = Unix timestamp). No top-level `eosDate` or `runtimeEosDates`.
 - **`type`** is an array (e.g. `["aws_lambda_function"]`) for this policy.
 
-**Inventory asset (one item),** `POST /api/v1.0/inventory` → `responseObjects[]` item keys:
+**Inventory asset (one item),** `POST /v2/api/inventory` or `POST /api/v1.0/inventory` → `responseObjects[]` item keys:
 
 `vcsId`, `vcsRepo`, `resourceCreationDate`, `assetId`, `assetType`, `name`, `providerId`, `state`, `resourceId`, `arn`, `accountId`, `tagsList`, `region`, `lastResourceStateChange`, `owner`, `tfObject`, `consoleURL`, `fireflyLink`, etc.
 

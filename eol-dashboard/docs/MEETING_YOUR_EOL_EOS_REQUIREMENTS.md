@@ -21,19 +21,22 @@ You can achieve this by calling the API from your own systems, scripts, or ticke
 
 ### 1. Look ahead for EOS/EOL and due dates (90 days out)
 
+**Flow in short:** You call the API with the EOL framework; for each policy you extract the EOS values (stored as **Unix timestamps** in the policy `description`); you **convert each value to a readable EOS date**; then you **decide if that EOS is in the next 3 months, 3–9 months, or already overdue** for prioritization and ticketing.
+
 - **EOL policies** are returned by **POST /v2/governance/insights** with `frameworks: ["EOL"]`. Each policy includes a **`description`** field.
 - **EOS dates per runtime** are inside that `description`: it is a JSON string containing an **`attributes`** array where each item has:
   - **`key`**: runtime identifier (e.g. `nodejs20.x`, `python3.13`, `java17`)
-  - **`value`**: EOS date as a **Unix timestamp (seconds)**
-- **Violating assets** are returned by **POST /api/inventory** ([Firefly Inventory API](https://docs.firefly.ai/general-information/api/inventory)) with `filters.violatingPoliciesIds` set to the policy ID. For Lambda (and similar asset types), each asset has **`tfObject.runtime`** (e.g. `python3.13`).
+  - **`value`**: EOS date as a **Unix timestamp (seconds)** — convert to a readable date (e.g. `new Date(value * 1000)` or your locale format).
+- **Violating assets** are returned by the inventory API (v2 or v1 fallback) with the policy. For Lambda (and similar asset types), each asset has **`tfObject.runtime`** (e.g. `python3.13`).
 
-**How you get a due date (e.g. 90 days before EOS):**
+**How you get a due date and segment (3 months vs 9 months):**
 
 1. Fetch EOL policies from the governance/insights endpoint.
-2. Parse each policy’s `description` as JSON and build a map: **runtime → EOS date** from `attributes`.
-3. For each violating asset from inventory, read **`asset.tfObject.runtime`**.
-4. Look up that runtime in your map to get the **EOS date**.
-5. Set your **due date = EOS date − 90 days** (or your preferred rule) and use it for ticketing and prioritization.
+2. Parse each policy’s `description` as JSON; from `attributes`, extract each **`value`** (Unix timestamp) and **convert to a readable EOS date**.
+3. Build a map: **runtime → EOS date** (and optionally runtime → “next 3 months” / “3–9 months” / “overdue” based on that date).
+4. For each violating asset from inventory, read **`asset.tfObject.runtime`**.
+5. Look up that runtime in your map to get the **EOS date** (and segment).
+6. Set your **due date = EOS date − 90 days** (or your preferred rule) and use the segment (next 3 months vs 3–9 months) for prioritization and ticketing.
 
 So you can ticket **6 months ahead** (e.g. anything with EOS in the next 6 months, including “Imminent” items) and set **due dates 90 days before EOS**—giving teams **more than 90 days** to remediate when you catch things early.
 
@@ -74,7 +77,7 @@ The following asset types are supported for EOL in the current API and align wit
 1. **Authenticate:** Call **POST /v2/login** with your Firefly `accessKey` and `secretKey`. Use the returned `accessToken` as a Bearer token on all following requests.
 2. **Get EOL policies:** Call **POST /v2/governance/insights** with `{"frameworks":["EOL"],"onlyMatchingAssets":true}`. Use `afterKey` in the response to page until you have all policies.
 3. **Parse EOS dates:** For each policy, parse the `description` field as JSON and build a runtime → EOS date map from the `attributes` array.
-4. **Get violating assets:** For each policy, call **POST /api/v1.0/inventory** with `governance` (policy name), `assetTypes` (the policy’s `type`—use the first value if it’s an array, e.g. `["aws_lambda_function"]` → `aws_lambda_function`), `assetState: "managed"`, and `size` (e.g. 100). Use `afterKey` to paginate.
+4. **Get violating assets:** For each policy, call **POST /v2/api/inventory** with body `{ "filters": { "assetState": "managed", "assetTypes": ["<policy type>"], "violatingPoliciesIds": ["<policy id>"] }, "size": 100 }` (use `policy.id` or `policy._id` from governance, and policy `type`). Use `afterKey` for pagination. If that returns no assets (e.g. for some policy types), use **POST /api/v1.0/inventory** with `governance` (policy name), `assetTypes`, `assetState: "managed"`, and `size` as fallback.
 5. **Compute due dates:** For each asset, read `tfObject.runtime`, look up the EOS date in your map, and set **due date = EOS date − 90 days** (or your rule).
 6. **Schedule and ticket:** Use severity, category, due date, and asset counts in your own ticketing and prioritization logic.
 

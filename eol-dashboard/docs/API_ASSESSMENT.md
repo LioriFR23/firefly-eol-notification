@@ -28,11 +28,8 @@
    - No separate “policy by ID” needed for listing; client can page through all EOL policies.
 
 3. **Get violating assets per policy**  
-   - **POST /api/v1.0/inventory** with:
-     - `governance`: policy name from insights
-     - `assetTypes`: policy type (e.g. `aws_lambda_function`)
-     - `size`, `assetState: "managed"`
-   - Returns `responseObjects` (assets) and supports `afterKey` for pagination.
+   - **POST /v2/api/inventory** with `filters.violatingPoliciesIds` (policy id), `filters.assetTypes`, `filters.assetState: "managed"`, `size`; use `afterKey` to paginate. If no results, **POST /api/v1.0/inventory** with `governance` (policy name) and `assetTypes` as fallback.
+   - Returns `responseObjects` (assets) and `afterKey` for pagination.
 
 4. **Filtering**  
    - Governance: `frameworks`, `onlyMatchingAssets`; docs also mention labels, category, severity, providersAccounts (exact support to be confirmed per OpenAPI).

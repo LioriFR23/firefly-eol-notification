@@ -172,6 +172,18 @@
       font-size: 12px;
     }
     .policy-resources.loading { color: #6b7280; }
+    .policy-runtime-eos {
+      padding: 6px 0 6px 0;
+      margin: 4px 0 0 0;
+      font-size: 12px;
+      color: #475569;
+      border-top: 1px solid #f1f5f9;
+    }
+    .policy-runtime-eos .runtime-eos-line {
+      display: block;
+      margin-bottom: 4px;
+    }
+    .policy-runtime-eos .runtime-eos-line:last-child { margin-bottom: 0; }
     .resource-item {
       padding: 6px 0;
       border-bottom: 1px solid #f1f5f9;
@@ -295,6 +307,37 @@
       return 'd180';
     }
 
+    /** From policy.description (attributes), return { runtime, eosDateStr, endsInStr } for each runtime. */
+    function getRuntimeEosLines(policy) {
+      try {
+        const desc = policy.description;
+        if (!desc || typeof desc !== 'string') return [];
+        const parsed = JSON.parse(desc);
+        const attrs = parsed && parsed.attributes;
+        if (!Array.isArray(attrs)) return [];
+        const nowSec = Math.floor(Date.now() / 1000);
+        return attrs.map(function(a) {
+          if (!a || a.key == null || typeof a.value !== 'number') return null;
+          const runtime = String(a.key);
+          const eosTs = a.value;
+          const eosDate = new Date(eosTs * 1000);
+          const eosDateStr = eosDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+          const days = (eosTs - nowSec) / 86400;
+          let endsInStr;
+          if (days < 0) endsInStr = 'Past EOS';
+          else {
+            const months = Math.floor(days / 30.44);
+            const remainderDays = days - months * 30.44;
+            const weeks = Math.round(remainderDays / 7);
+            if (months === 0) endsInStr = weeks <= 0 ? 'Ends in &lt;1 week' : (weeks === 1 ? 'Ends in 1 week' : 'Ends in ' + weeks + ' weeks');
+            else if (weeks >= 1) endsInStr = 'Ends in ' + months + ' month' + (months !== 1 ? 's' : '') + ' and ' + weeks + ' week' + (weeks !== 1 ? 's' : '');
+            else endsInStr = 'Ends in ' + months + ' month' + (months !== 1 ? 's' : '');
+          }
+          return { runtime: runtime, eosDateStr: eosDateStr, endsInStr: endsInStr };
+        }).filter(Boolean);
+      } catch (e) { return []; }
+    }
+
     function urgencyFromPolicy(p) {
       const name = (p.name || '').toLowerCase();
       const badge = (p.badge || '').toLowerCase();
@@ -333,11 +376,16 @@
         const daysLabel = days !== null && days !== undefined ? (days < 0 ? ' (past EOS)' : ' (EOS in ' + days + 'd)') : '';
         const nameEsc = escapeAttr(p.name);
         const policyId = (p.id || p._id || '');
+        const runtimeLines = getRuntimeEosLines(p);
+        const runtimeBlock = runtimeLines.length ? '<div class="policy-runtime-eos">' + runtimeLines.map(function(r) {
+          return '<span class="runtime-eos-line">' + escapeHtml(r.runtime) + ': ' + escapeHtml(r.eosDateStr) + ' (' + r.endsInStr + ')</span>';
+        }).join('') + '</div>' : '';
         return '<li class="policy-row">' +
           '<div class="policy-row-header">' +
           '<span><span class="asset-type">' + typeStr + '</span> – ' + (p.total_assets || 0) + ' assets' + (showDays && daysLabel ? '<span class="eos-days">' + daysLabel + '</span>' : '') + '</span>' +
           '<button type="button" class="btn-resources">View resources</button>' +
           '</div>' +
+          (runtimeBlock || '') +
           '<div class="policy-resources" data-policy-name="' + nameEsc + '" data-policy-type="' + escapeAttr(typeStr) + '" data-policy-id="' + escapeAttr(policyId) + '" style="display:none"></div>' +
           '</li>';
       }

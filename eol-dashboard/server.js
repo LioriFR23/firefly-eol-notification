@@ -75,6 +75,7 @@ function getDaysUntilEosFromMap(eosMap) {
   return Math.floor((minTs - Math.floor(Date.now() / 1000)) / 86400);
 }
 
+// Map API name/badge to segment. API often puts time bucket in name: "Ended - ...", "Imminent (<3 months) - ...", "Upcoming (3-9 months) - ..."
 function segmentLabel(days, policy) {
   if (days !== null) {
     if (days < 0) return 'Overdue';
@@ -83,25 +84,24 @@ function segmentLabel(days, policy) {
     return '6+ months';
   }
   if (policy) {
-    const badge = (policy.badge || '').toLowerCase();
     const name = (policy.name || '').toLowerCase();
-    if (badge.includes('ended') || name.includes('overdue') || name.includes('past')) return 'Overdue';
-    if (badge.includes('imminent') || name.includes('0-90') || name.includes('0–90')) return '0-90 days';
-    if (badge.includes('90d') || badge.includes('6mo') || badge.includes('upcoming') || name.includes('90d') || name.includes('6mo') || name.includes('bitnami')) return '90d-6mo';
-    if (badge.includes('6+') || name.includes('6+')) return '6+ months';
-    if (policy.badge) return policy.badge;
+    if (name.startsWith('ended') || name.startsWith('deprecated -') || name.includes('ended -') || name.includes('past eos')) return 'Overdue';
+    if (name.startsWith('imminent') || name.includes('imminent (<3') || name.includes('0-90') || name.includes('due soon')) return '0-90 days';
+    if (name.startsWith('upcoming (3-9') || name.includes('upcoming (3-9 months)') || name.includes('3-9 months')) return '90d-6mo';
+    if (name.includes('upcoming') || name.includes('6+ months') || name.includes('backlog')) return name.includes('6+') || name.includes('backlog') ? '6+ months' : '90d-6mo';
+    if (policy.badge && policy.badge.trim()) return policy.badge.trim();
   }
-  return 'See policy name';
+  return '';
 }
 
-function segmentFallback(seg, policyName, policyBadge) {
+function segmentFallback(seg, policyName, policyBadge, policyCategory) {
   if (seg && seg.trim()) return seg;
-  const badge = (policyBadge || '').toLowerCase();
   const n = (policyName || '').toLowerCase();
-  if (badge.includes('ended') || badge.includes('overdue') || n.includes('overdue') || n.includes('ended') || n.includes('past')) return 'Overdue';
-  if (badge.includes('imminent') || n.includes('imminent') || n.includes('0-90') || n.includes('0–90')) return '0-90 days';
-  if (badge.includes('90d') || badge.includes('6mo') || badge.includes('upcoming') || n.includes('90d') || n.includes('6mo') || n.includes('upcoming') || n.includes('bitnami') || n.includes('image risk')) return '90d-6mo';
-  if (badge.includes('6+') || n.includes('6+')) return '6+ months';
+  if (n.startsWith('ended') || n.startsWith('deprecated -') || n.includes('ended -') || n.includes('past eos')) return 'Overdue';
+  if (n.startsWith('imminent') || n.includes('imminent (<3') || n.includes('0-90') || n.includes('due soon')) return '0-90 days';
+  if (n.startsWith('upcoming (3-9') || n.includes('upcoming (3-9 months)') || n.includes('3-9 months')) return '90d-6mo';
+  if (n.includes('6+ months') || n.includes('backlog')) return '6+ months';
+  if (n.includes('upcoming')) return '90d-6mo';
   if (policyBadge && policyBadge.trim()) return policyBadge.trim();
   return '';
 }
@@ -112,9 +112,61 @@ function csvEscape(s) {
   return t;
 }
 
+// EOS key field per asset type (from Firefly inventory tfObject). Policy description attributes
+// use these values as keys (e.g. nodejs20.x, 1.34, 8.0.42, POSTGRES_13, glue_version, etc.).
+const RUNTIME_TYPES = new Set([
+  'aws_lambda_function', 'google_cloudfunctions_function', 'google_cloudfunctions2_function'
+]);
+const VERSION_TYPES = new Set([
+  'aws_eks_cluster'
+]);
+const ENGINE_VERSION_TYPES = new Set([
+  'aws_db_instance', 'aws_rds_cluster', 'aws_elasticache_cluster', 'aws_elasticache_replication_group',
+  'aws_docdb_cluster', 'aws_docdb_global_cluster'
+]);
+const DATABASE_VERSION_TYPES = new Set([
+  'google_sql_database_instance'
+]);
+const MASTER_NODE_VERSION_TYPES = new Set([
+  'google_container_cluster'
+]);
+const GLUE_VERSION_TYPE = 'aws_glue_job';
+const AIRFLOW_VERSION_TYPE = 'aws_mwaa_environment';
+
+function getEosKeyFromAsset(asset) {
+  if (!asset || !asset.tfObject) return null;
+  const tf = asset.tfObject;
+  const type = (asset.assetType || asset.type || '').toLowerCase();
+  let v;
+  if (RUNTIME_TYPES.has(type)) {
+    v = tf.runtime;
+    if (v == null && type === 'google_cloudfunctions2_function' && tf.service_config) v = tf.service_config.runtime;
+  } else if (VERSION_TYPES.has(type)) {
+    v = tf.version || tf.kubernetes_version || tf.cluster_version;
+  } else if (ENGINE_VERSION_TYPES.has(type)) {
+    v = tf.engine_version_actual != null ? tf.engine_version_actual : tf.engine_version;
+  } else if (DATABASE_VERSION_TYPES.has(type)) {
+    v = tf.database_version;
+  } else if (MASTER_NODE_VERSION_TYPES.has(type)) {
+    v = tf.master_version || tf.min_master_version || tf.node_version;
+  } else if (type === GLUE_VERSION_TYPE) {
+    v = tf.glue_version;
+  } else if (type === AIRFLOW_VERSION_TYPE) {
+    v = tf.airflow_version;
+  } else if (type === 'google_composer_environment' && tf.config) {
+    const c = tf.config;
+    const soft = c.software_config || c.softwareConfig;
+    v = soft && (soft.image_version != null ? soft.image_version : soft.airflow_version);
+    if (v == null && c.imageVersion) v = c.imageVersion;
+  } else {
+    v = tf.runtime || tf.version;
+  }
+  return v != null ? String(v) : null;
+}
+
 function formatEosAndDue(eosMap, asset) {
-  const runtime = asset && asset.tfObject && asset.tfObject.runtime ? String(asset.tfObject.runtime) : null;
-  const eosTs = runtime && eosMap[runtime] != null ? eosMap[runtime] : (Object.values(eosMap).length ? Math.min(...Object.values(eosMap)) : null);
+  const eosKey = getEosKeyFromAsset(asset);
+  const eosTs = eosKey && eosMap[eosKey] != null ? eosMap[eosKey] : (Object.values(eosMap).length ? Math.min(...Object.values(eosMap)) : null);
   if (eosTs == null) return { eosDate: '', dueDate: '', daysUntilEos: '' };
   const eosDate = new Date(eosTs * 1000).toISOString().split('T')[0];
   const dueTs = eosTs - 90 * 86400;
@@ -283,7 +335,7 @@ app.post('/api/export-full-csv', async (req, res) => {
       const segment = segmentLabel(days, policy);
       const pType = policyType(policy);
       const policyNameStr = policy.name || policy.policyName || '';
-      const segOut = segmentFallback(segment, policyNameStr, policy.badge);
+      const segOut = segmentFallback(segment, policyNameStr, policy.badge, policy.category);
       const badgeOut = (policy.badge || segment || segOut || '').trim() || segOut;
 
       for (const asset of assets) {
