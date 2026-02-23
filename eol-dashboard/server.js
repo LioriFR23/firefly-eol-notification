@@ -94,14 +94,16 @@ function segmentLabel(days, policy) {
   return 'See policy name';
 }
 
-function segmentFallback(seg, policyName) {
+function segmentFallback(seg, policyName, policyBadge) {
   if (seg && seg.trim()) return seg;
+  const badge = (policyBadge || '').toLowerCase();
   const n = (policyName || '').toLowerCase();
-  if (n.includes('overdue') || n.includes('ended') || n.includes('past')) return 'Overdue';
-  if (n.includes('imminent') || n.includes('0-90') || n.includes('0–90')) return '0-90 days';
-  if (n.includes('90d') || n.includes('6mo') || n.includes('upcoming') || n.includes('bitnami') || n.includes('image risk')) return '90d-6mo';
-  if (n.includes('6+')) return '6+ months';
-  return '90d-6mo';
+  if (badge.includes('ended') || badge.includes('overdue') || n.includes('overdue') || n.includes('ended') || n.includes('past')) return 'Overdue';
+  if (badge.includes('imminent') || n.includes('imminent') || n.includes('0-90') || n.includes('0–90')) return '0-90 days';
+  if (badge.includes('90d') || badge.includes('6mo') || badge.includes('upcoming') || n.includes('90d') || n.includes('6mo') || n.includes('upcoming') || n.includes('bitnami') || n.includes('image risk')) return '90d-6mo';
+  if (badge.includes('6+') || n.includes('6+')) return '6+ months';
+  if (policyBadge && policyBadge.trim()) return policyBadge.trim();
+  return '';
 }
 
 function csvEscape(s) {
@@ -281,7 +283,7 @@ app.post('/api/export-full-csv', async (req, res) => {
       const segment = segmentLabel(days, policy);
       const pType = policyType(policy);
       const policyNameStr = policy.name || policy.policyName || '';
-      const segOut = segmentFallback(segment, policyNameStr);
+      const segOut = segmentFallback(segment, policyNameStr, policy.badge);
       const badgeOut = (policy.badge || segment || segOut || '').trim() || segOut;
 
       for (const asset of assets) {
