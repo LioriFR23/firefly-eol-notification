@@ -215,6 +215,7 @@
           <input type="password" id="secretKey" placeholder="Firefly secret key" autocomplete="off">
         </div>
         <button type="button" class="btn" id="btnAuth">Sign in</button>
+        <button type="button" class="btn btn-secondary" id="btnSignOut" style="margin-left:8px; display:none;">Sign out</button>
         <p id="authStatus" class="msg-error"></p>
       </div>
 
@@ -240,8 +241,34 @@
 
   <script>
     const base = window.location.origin;
+    const STORAGE_KEY = 'eol-dashboard-auth';
     let token = '';
     let lastLoadedPolicies = [];
+
+    function loadStoredAuth() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return false;
+        const data = JSON.parse(raw);
+        const accessToken = data.accessToken || data.access_token;
+        if (!accessToken) return false;
+        const expiresAt = data.expiresAt != null ? data.expiresAt : data.expires_at;
+        if (expiresAt != null && typeof expiresAt === 'number' && expiresAt < Math.floor(Date.now() / 1000)) return false;
+        token = accessToken;
+        return true;
+      } catch (e) { return false; }
+    }
+    function saveAuth(data) {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({
+          accessToken: data.accessToken || data.access_token,
+          expiresAt: data.expiresAt != null ? data.expiresAt : data.expires_at
+        }));
+      } catch (e) {}
+    }
+    function clearStoredAuth() {
+      try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
+    }
 
     function getDaysUntilEos(policy) {
       try {
@@ -345,8 +372,12 @@
         if (b === 'd180') return '6+ months';
         return b || '';
       };
+      var aboutToBeDeprecated = function(p) {
+        var d = p._daysUntilEos;
+        return d != null && d <= 180;
+      };
       var rows = [['Segment', 'Policy Name', 'Asset Type', 'Asset Count', 'Severity', 'Badge', 'Days until EOS']];
-      lastLoadedPolicies.forEach(function(p) {
+      lastLoadedPolicies.filter(aboutToBeDeprecated).forEach(function(p) {
         var typeStr = Array.isArray(p.type) ? (p.type[0] || '') : (p.type || '');
         rows.push([
           segmentLabel(p._eosBucket),
@@ -358,13 +389,14 @@
           p._daysUntilEos != null ? String(p._daysUntilEos) : ''
         ]);
       });
+      var escapeCsv = function(s) {
+        var t = String(s);
+        if (/^[=+\-@\t]/.test(t) || t.indexOf(',') >= 0 || t.indexOf('"') >= 0 || t.indexOf('\n') >= 0)
+          return '"' + t.replace(/"/g, '""') + '"';
+        return t;
+      };
       var csv = rows.map(function(row) {
-        return row.map(function(cell) {
-          var s = String(cell);
-          if (s.indexOf(',') >= 0 || s.indexOf('"') >= 0 || s.indexOf('\n') >= 0)
-            return '"' + s.replace(/"/g, '""') + '"';
-          return s;
-        }).join(',');
+        return row.map(escapeCsv).join(',');
       }).join('\n');
       var blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
       var a = document.createElement('a');
@@ -475,6 +507,26 @@
       }
     };
 
+    if (loadStoredAuth()) {
+      document.getElementById('authStatus').textContent = 'Signed in (session restored).';
+      document.getElementById('authStatus').className = 'msg-success';
+      document.getElementById('btnPolicies').disabled = false;
+      document.getElementById('btnExportCsv').disabled = true;
+      document.getElementById('btnExportFullCsv').disabled = false;
+      document.getElementById('btnSignOut').style.display = 'inline-block';
+    }
+
+    document.getElementById('btnSignOut').onclick = function() {
+      token = '';
+      clearStoredAuth();
+      document.getElementById('authStatus').textContent = '';
+      document.getElementById('authStatus').className = 'msg-error';
+      document.getElementById('btnPolicies').disabled = true;
+      document.getElementById('btnExportCsv').disabled = true;
+      document.getElementById('btnExportFullCsv').disabled = true;
+      document.getElementById('btnSignOut').style.display = 'none';
+    };
+
     document.getElementById('btnAuth').onclick = async () => {
       const accessKey = document.getElementById('accessKey').value.trim();
       const secretKey = document.getElementById('secretKey').value.trim();
@@ -486,11 +538,13 @@
         const data = await r.json();
         if (!r.ok) { el.textContent = data.error || 'Auth failed'; el.className = 'msg-error'; return; }
         token = data.accessToken;
+        saveAuth(data);
         el.textContent = 'Signed in. You can load EOL policies and view the timeline.';
         el.className = 'msg-success';
         document.getElementById('btnPolicies').disabled = false;
         document.getElementById('btnExportCsv').disabled = true;
         document.getElementById('btnExportFullCsv').disabled = false;
+        document.getElementById('btnSignOut').style.display = 'inline-block';
       } catch (e) {
         el.textContent = e.message || 'Request failed';
         el.className = 'msg-error';

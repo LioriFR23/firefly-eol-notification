@@ -187,6 +187,7 @@ app.post('/api/export-full-csv', async (req, res) => {
       if (!(policy.total_assets > 0)) continue;
       const days = getDaysUntilEos(policy);
       const segment = segmentLabel(days);
+      if (days === null || days > 180) continue;
       const pType = policyType(policy);
       let inventoryAfterKey = null;
       let assets = [];
@@ -230,7 +231,7 @@ app.post('/api/export-full-csv', async (req, res) => {
         const { eosDate, dueDate, daysUntilEos } = formatEosAndDue(policy, asset);
         const escape = (s) => {
           const t = String(s ?? '');
-          if (t.indexOf(',') >= 0 || t.indexOf('"') >= 0 || t.indexOf('\n') >= 0) return '"' + t.replace(/"/g, '""') + '"';
+          if (/^[=+\-@\t]/.test(t) || t.indexOf(',') >= 0 || t.indexOf('"') >= 0 || t.indexOf('\n') >= 0) return '"' + t.replace(/"/g, '""') + '"';
           return t;
         };
         rows.push([
