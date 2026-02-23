@@ -376,7 +376,7 @@
       };
       var aboutToBeDeprecated = function(p) {
         var d = p._daysUntilEos;
-        return d != null && d > 0 && d <= 180;
+        return d === null || d >= 0;
       };
       var rows = [['Segment', 'Policy Name', 'Asset Type', 'Asset Count', 'Severity', 'Badge', 'Days until EOS']];
       lastLoadedPolicies.filter(aboutToBeDeprecated).forEach(function(p) {

@@ -65,23 +65,52 @@ function getEosMapFromPolicy(policy) {
 }
 
 function getDaysUntilEos(policy) {
-  const map = getEosMapFromPolicy(policy);
-  const values = Object.values(map);
+  return getDaysUntilEosFromMap(getEosMapFromPolicy(policy));
+}
+
+function getDaysUntilEosFromMap(eosMap) {
+  const values = Object.values(eosMap);
   if (values.length === 0) return null;
   const minTs = Math.min(...values);
   return Math.floor((minTs - Math.floor(Date.now() / 1000)) / 86400);
 }
 
-function segmentLabel(days) {
-  if (days === null) return '';
-  if (days < 0) return 'Overdue';
-  if (days <= 90) return '0-90 days';
-  if (days <= 180) return '90d-6mo';
-  return '6+ months';
+function segmentLabel(days, policy) {
+  if (days !== null) {
+    if (days < 0) return 'Overdue';
+    if (days <= 90) return '0-90 days';
+    if (days <= 180) return '90d-6mo';
+    return '6+ months';
+  }
+  if (policy) {
+    const badge = (policy.badge || '').toLowerCase();
+    const name = (policy.name || '').toLowerCase();
+    if (badge.includes('ended') || name.includes('overdue') || name.includes('past')) return 'Overdue';
+    if (badge.includes('imminent') || name.includes('0-90') || name.includes('0–90')) return '0-90 days';
+    if (badge.includes('90d') || badge.includes('6mo') || badge.includes('upcoming') || name.includes('90d') || name.includes('6mo') || name.includes('bitnami')) return '90d-6mo';
+    if (badge.includes('6+') || name.includes('6+')) return '6+ months';
+    if (policy.badge) return policy.badge;
+  }
+  return 'See policy name';
 }
 
-function formatEosAndDue(policy, asset) {
-  const eosMap = getEosMapFromPolicy(policy);
+function segmentFallback(seg, policyName) {
+  if (seg && seg.trim()) return seg;
+  const n = (policyName || '').toLowerCase();
+  if (n.includes('overdue') || n.includes('ended') || n.includes('past')) return 'Overdue';
+  if (n.includes('imminent') || n.includes('0-90') || n.includes('0–90')) return '0-90 days';
+  if (n.includes('90d') || n.includes('6mo') || n.includes('upcoming') || n.includes('bitnami') || n.includes('image risk')) return '90d-6mo';
+  if (n.includes('6+')) return '6+ months';
+  return '90d-6mo';
+}
+
+function csvEscape(s) {
+  const t = String(s ?? '');
+  if (/^[=+\-@\t]/.test(t) || t.indexOf(',') >= 0 || t.indexOf('"') >= 0 || t.indexOf('\n') >= 0) return '"' + t.replace(/"/g, '""') + '"';
+  return t;
+}
+
+function formatEosAndDue(eosMap, asset) {
   const runtime = asset && asset.tfObject && asset.tfObject.runtime ? String(asset.tfObject.runtime) : null;
   const eosTs = runtime && eosMap[runtime] != null ? eosMap[runtime] : (Object.values(eosMap).length ? Math.min(...Object.values(eosMap)) : null);
   if (eosTs == null) return { eosDate: '', dueDate: '', daysUntilEos: '' };
@@ -161,6 +190,66 @@ app.post('/api/inventory', async (req, res) => {
   }
 });
 
+// ——— Fetch all assets for one policy (used for parallel export) ———
+const policyType = (p) => Array.isArray(p.type) ? (p.type[0] || '') : (p.type || '');
+
+async function fetchAssetsForPolicy(policy, headers) {
+  const pType = policyType(policy);
+  if (!policy.name || !pType) return { policy, assets: [] };
+  let inventoryAfterKey = null;
+  let assets = [];
+  do {
+    let data = null;
+    try {
+      const v1Body = buildInventoryBodyV1({
+        assetState: 'managed',
+        assetTypes: pType,
+        governance: policy.name,
+        size: 500,
+        afterKey: inventoryAfterKey
+      });
+      const v1Res = await axios.post(`${FIREFLY_BASE_URL}${FIREFLY_INVENTORY_V1}`, v1Body, { headers });
+      data = v1Res.data;
+    } catch (_) {
+      data = { responseObjects: [] };
+    }
+    if (!(data.responseObjects && data.responseObjects.length)) {
+      try {
+        const v2Body = buildInventoryBodyV2({
+          assetState: 'managed',
+          assetTypes: pType,
+          violatingPoliciesIds: (policy.id || policy._id) ? [policy.id || policy._id] : undefined,
+          governance: policy.name,
+          size: 500,
+          afterKey: inventoryAfterKey
+        });
+        const v2Res = await axios.post(`${FIREFLY_BASE_URL}${FIREFLY_INVENTORY_V2}`, v2Body, { headers });
+        data = v2Res.data;
+      } catch (_) {
+        data = { responseObjects: [] };
+      }
+    }
+    const list = (data && data.responseObjects) ? data.responseObjects : (data && data.assets) ? data.assets : (data && data.items) ? data.items : [];
+    assets = assets.concat(Array.isArray(list) ? list : []);
+    inventoryAfterKey = data && data.afterKey != null ? data.afterKey : null;
+  } while (inventoryAfterKey);
+  return { policy, assets };
+}
+
+// Run up to concurrency promises at a time, preserve order
+async function runWithLimit(items, concurrency, fn) {
+  const results = new Array(items.length);
+  let index = 0;
+  async function runNext() {
+    const i = index++;
+    if (i >= items.length) return;
+    results[i] = await fn(items[i]);
+    await runNext();
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, runNext));
+  return results;
+}
+
 // ——— Full CSV export: one row per asset, with EOS and due date ———
 app.post('/api/export-full-csv', async (req, res) => {
   try {
@@ -179,72 +268,37 @@ app.post('/api/export-full-csv', async (req, res) => {
       afterKey = r.data.afterKey || null;
     } while (afterKey);
 
-    const policyType = (p) => Array.isArray(p.type) ? (p.type[0] || '') : (p.type || '');
+    const policiesWithTypes = allPolicies.filter(p => policyType(p) && (p.name || p.policyName));
+    const CONCURRENCY = 4;
+    const policyAssetsList = await runWithLimit(policiesWithTypes, CONCURRENCY, (policy) => fetchAssetsForPolicy(policy, headers));
+
     const rows = [];
     const csvHeader = 'Policy Name,Segment,Asset Type,Asset Name,ARN,Severity,Badge,EOS Date,Due Date,Days Until EOS';
 
-    for (const policy of allPolicies) {
-      if (!(policy.total_assets > 0)) continue;
-      const days = getDaysUntilEos(policy);
-      const segment = segmentLabel(days);
-      if (days === null || days < 0 || days > 180) continue;
+    for (const { policy, assets } of policyAssetsList) {
+      const eosMap = getEosMapFromPolicy(policy);
+      const days = getDaysUntilEosFromMap(eosMap);
+      const segment = segmentLabel(days, policy);
       const pType = policyType(policy);
-      let inventoryAfterKey = null;
-      let assets = [];
-      do {
-        let data = null;
-        if (policy.name && pType) {
-          try {
-            const v1Body = buildInventoryBodyV1({
-              assetState: 'managed',
-              assetTypes: pType,
-              governance: policy.name,
-              size: 500,
-              afterKey: inventoryAfterKey
-            });
-            const v1Res = await axios.post(`${FIREFLY_BASE_URL}${FIREFLY_INVENTORY_V1}`, v1Body, { headers });
-            data = v1Res.data;
-          } catch (_) {
-            data = { responseObjects: [] };
-          }
-        }
-        if (!data || !(data.responseObjects || []).length) {
-          const v2Body = buildInventoryBodyV2({
-            assetState: 'managed',
-            assetTypes: pType,
-            violatingPoliciesIds: (policy.id || policy._id) ? [policy.id || policy._id] : undefined,
-            governance: policy.name,
-            size: 500,
-            afterKey: inventoryAfterKey
-          });
-          const v2Res = await axios.post(`${FIREFLY_BASE_URL}${FIREFLY_INVENTORY_V2}`, v2Body, { headers });
-          data = v2Res.data;
-        }
-        const list = data.responseObjects || [];
-        assets = assets.concat(list);
-        inventoryAfterKey = data.afterKey || null;
-      } while (inventoryAfterKey);
+      const policyNameStr = policy.name || policy.policyName || '';
+      const segOut = segmentFallback(segment, policyNameStr);
+      const badgeOut = (policy.badge || segment || segOut || '').trim() || segOut;
 
       for (const asset of assets) {
         const name = asset.name || asset.resourceId || asset.assetId || '—';
         const arn = asset.arn || asset.resourceId || asset.assetId || asset.frn || '—';
-        const { eosDate, dueDate, daysUntilEos } = formatEosAndDue(policy, asset);
-        const escape = (s) => {
-          const t = String(s ?? '');
-          if (/^[=+\-@\t]/.test(t) || t.indexOf(',') >= 0 || t.indexOf('"') >= 0 || t.indexOf('\n') >= 0) return '"' + t.replace(/"/g, '""') + '"';
-          return t;
-        };
+        const { eosDate, dueDate, daysUntilEos } = formatEosAndDue(eosMap, asset);
         rows.push([
-          escape(policy.name || ''),
-          escape(segment),
-          escape(pType),
-          escape(name),
-          escape(arn),
-          escape(policy.severity || ''),
-          escape(policy.badge || ''),
-          escape(eosDate),
-          escape(dueDate),
-          escape(daysUntilEos)
+          csvEscape(policyNameStr),
+          csvEscape(segOut),
+          csvEscape(pType),
+          csvEscape(name),
+          csvEscape(arn),
+          csvEscape(policy.severity || ''),
+          csvEscape(badgeOut),
+          csvEscape(eosDate),
+          csvEscape(dueDate),
+          csvEscape(daysUntilEos)
         ].join(','));
       }
     }
