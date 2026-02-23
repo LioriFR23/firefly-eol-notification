@@ -72,17 +72,41 @@ function clearToken() {
 }
 
 function isTokenExpired(tokenData) {
-    if (!tokenData || !tokenData.expiresAt) return true;
-    
-    // expiresAt is in seconds from now, so we need to calculate the actual expiry time
+    if (!tokenData || !tokenData.accessToken) return true;
+    // If Firefly didn't return expiresAt, treat as valid (rely on 401 to detect expiry)
+    if (!tokenData.expiresAt) return false;
     const now = Math.floor(Date.now() / 1000);
     const actualExpiryTime = tokenData.createdAt ? tokenData.createdAt + tokenData.expiresAt : now + tokenData.expiresAt;
-    
     return now >= actualExpiryTime;
 }
 
 // Firefly API configuration
 const FIREFLY_BASE_URL = 'https://api.firefly.ai';
+const FIREFLY_INVENTORY_PATH = '/v2/api/inventory'; // Firefly Inventory API v2 (filters-based)
+const FIREFLY_INVENTORY_V1_PATH = '/api/v1.0/inventory'; // v1 supports governance = policy name (e.g. kubernetes_*)
+
+function buildInventoryBody(opts) {
+  const { assetState = 'managed', assetTypes, violatingPoliciesIds, governance, afterKey, size } = opts || {};
+  const body = { filters: {} };
+  if (assetState) body.filters.assetState = assetState;
+  if (assetTypes) body.filters.assetTypes = Array.isArray(assetTypes) ? assetTypes : [assetTypes];
+  if (violatingPoliciesIds && violatingPoliciesIds.length) body.filters.violatingPoliciesIds = violatingPoliciesIds;
+  if (governance && typeof governance === 'string' && governance.trim()) body.governance = governance.trim();
+  if (size != null) body.size = size;
+  if (afterKey != null) body.afterKey = afterKey;
+  return body;
+}
+
+function buildInventoryBodyV1(opts) {
+  const { assetState = 'managed', assetTypes, governance, afterKey, size } = opts || {};
+  const body = { assetState: assetState || 'managed' };
+  if (assetTypes && (Array.isArray(assetTypes) ? assetTypes.length : assetTypes))
+    body.assetTypes = Array.isArray(assetTypes) ? assetTypes[0] : assetTypes;
+  if (governance && typeof governance === 'string' && governance.trim()) body.governance = governance.trim();
+  if (size != null) body.size = size;
+  if (afterKey != null) body.afterKey = afterKey;
+  return body;
+}
 
 // Helper function to extract system tag value from asset for grouping EOL violations
 function extractTagValue(asset, tagKey = 'appsflyer.com/system') {
@@ -308,9 +332,8 @@ const testFireflyAPI = async () => {
       pageCount++;
       // Fetching page
       
-      const requestBody = afterKey ? { afterKey, assetState: "managed" } : { assetState: "managed" };
-      
-      const inventoryResponse = await axios.post(`${FIREFLY_BASE_URL}/api/v1.0/inventory`, requestBody, {
+      const requestBody = buildInventoryBody({ assetState: 'managed', afterKey });
+      const inventoryResponse = await axios.post(`${FIREFLY_BASE_URL}${FIREFLY_INVENTORY_PATH}`, requestBody, {
         headers: {
           'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json'
@@ -507,7 +530,7 @@ app.post('/api/inventory', async (req, res) => {
     // Starting efficient inventory fetch
     
     // First, get a sample to understand the data structure
-    const sampleResponse = await axios.post(`${FIREFLY_BASE_URL}/api/v1.0/inventory`, { assetState: "managed" }, {
+    const sampleResponse = await axios.post(`${FIREFLY_BASE_URL}${FIREFLY_INVENTORY_PATH}`, buildInventoryBody({ assetState: 'managed', size: 10 }), {
       headers: {
         'Authorization': `Bearer ${accessToken}`,
         'Content-Type': 'application/json'
@@ -530,9 +553,8 @@ app.post('/api/inventory', async (req, res) => {
     do {
       pageCount++;
       
-      const requestBody = afterKey ? { afterKey, assetState: "managed" } : { assetState: "managed" };
-      
-      const response = await axios.post(`${FIREFLY_BASE_URL}/api/v1.0/inventory`, requestBody, {
+      const requestBody = buildInventoryBody({ assetState: 'managed', afterKey });
+      const response = await axios.post(`${FIREFLY_BASE_URL}${FIREFLY_INVENTORY_PATH}`, requestBody, {
         headers: {
           'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json'
@@ -588,9 +610,11 @@ app.post('/api/inventory', async (req, res) => {
 // Get EOL violations and their violating assets, then aggregate by owner
 app.post('/api/inventory/sample', async (req, res) => {
   try {
-    const { accessToken } = loadToken();
+    // Prefer token from request body (e.g. fresh from UI sign-in), then cached
+    const cached = loadToken();
+    const accessToken = (req.body && req.body.accessToken) || (cached && cached.accessToken);
     if (!accessToken) {
-      return res.status(401).json({ error: 'Authentication required. No access token found.' });
+      return res.status(401).json({ error: 'Authentication required. No access token found. Sign in first.' });
     }
     
     const { minViolations = 1 } = req.body; // Configurable minimum violations threshold
@@ -663,23 +687,32 @@ app.post('/api/inventory/sample', async (req, res) => {
             // Processing policy
             
             try {
-              // Use the exact approach you described: assetTypes, size, and governance filters
-              const inventoryResponse = await axios.post(`${FIREFLY_BASE_URL}/api/v1.0/inventory`, {
-                assetTypes: policy.type,
-                size: policy.total_assets,
-                governance: policy.name,
-                assetState: "managed"
-              }, {
-                headers: {
-                  'Authorization': `Bearer ${accessToken}`,
-                  'Content-Type': 'application/json'
+              const policyId = policy.id || policy._id;
+              const policyType = Array.isArray(policy.type) ? policy.type : (policy.type ? [policy.type] : []);
+              const headers = { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' };
+              let inventoryResponse = await axios.post(`${FIREFLY_BASE_URL}${FIREFLY_INVENTORY_PATH}`, buildInventoryBody({
+                assetState: 'managed',
+                assetTypes: policyType.length ? policyType : undefined,
+                violatingPoliciesIds: policyId ? [policyId] : undefined,
+                governance: policy.name || undefined,
+                size: policy.total_assets
+              }), { headers });
+              let inventoryData = inventoryResponse.data;
+              let policyAssets = inventoryData.responseObjects || [];
+              if (policyAssets.length === 0 && policy.name && policyType.length) {
+                try {
+                  inventoryResponse = await axios.post(`${FIREFLY_BASE_URL}${FIREFLY_INVENTORY_V1_PATH}`, buildInventoryBodyV1({
+                    assetState: 'managed',
+                    assetTypes: policyType,
+                    governance: policy.name,
+                    size: policy.total_assets
+                  }), { headers });
+                  inventoryData = inventoryResponse.data;
+                  policyAssets = inventoryData.responseObjects || [];
+                } catch (v1Err) {
+                  if (v1Err.response?.status !== 404) console.error(`  v1 inventory fallback for ${policy.name}:`, v1Err.message);
                 }
-              });
-              
-              const inventoryData = inventoryResponse.data;
-              const policyAssets = inventoryData.responseObjects || [];
-              
-              // Found violating assets for policy
+              }
               
               // Add these assets as violating assets with real owner extraction
               policyAssets.forEach(asset => {

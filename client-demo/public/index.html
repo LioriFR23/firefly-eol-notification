@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Firefly EOL Dashboard</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 20px;
+      line-height: 1.6;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+      overflow: hidden;
+    }
+    .header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 30px;
+      text-align: center;
+    }
+    .header h1 { font-size: 2.5rem; margin-bottom: 10px; }
+    .header p { opacity: 0.9; font-size: 1.1rem; }
+    .content { padding: 30px; }
+    .step {
+      margin-bottom: 32px;
+      padding: 32px;
+      background: white;
+      border: 1px solid #e5e7eb;
+      border-radius: 16px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+      transition: all 0.3s ease;
+    }
+    .step:hover {
+      border-color: #667eea;
+      box-shadow: 0 8px 25px rgba(102, 126, 234, 0.15);
+      transform: translateY(-2px);
+    }
+    .step h2 { color: #333; margin-bottom: 15px; font-size: 1.5rem; }
+    .form-group { margin-bottom: 20px; }
+    .form-group label { display: block; margin-bottom: 8px; font-weight: 600; color: #555; }
+    .form-group input {
+      width: 100%;
+      padding: 12px;
+      border: 2px solid #e0e0e0;
+      border-radius: 6px;
+      font-size: 16px;
+      transition: border-color 0.3s ease;
+    }
+    .form-group input:focus { outline: none; border-color: #667eea; }
+    .btn {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 16px;
+      font-weight: 600;
+      transition: transform 0.2s ease;
+    }
+    .btn:hover { transform: translateY(-2px); }
+    .btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+    .btn-secondary { background: linear-gradient(135deg, #6c757d 0%, #495057 100%); }
+    .btn-secondary:hover { background: linear-gradient(135deg, #5a6268 0%, #3d4449 100%); }
+    .msg-error { color: #b91c1c; margin-top: 8px; font-size: 14px; }
+    .msg-success { color: #15803d; margin-top: 8px; font-size: 14px; }
+
+    /* Date-anchored timeline */
+    .timeline-intro { margin-bottom: 20px; color: #555; font-size: 14px; }
+    .timeline-today {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 20px;
+      padding: 14px 20px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border-radius: 12px;
+      font-size: 15px;
+      font-weight: 600;
+    }
+    .timeline-today .date { opacity: 0.95; font-weight: 700; letter-spacing: 0.3px; }
+    .timeline-today .label { opacity: 0.9; font-size: 13px; font-weight: 500; }
+    .timeline-axis {
+      display: flex;
+      align-items: stretch;
+      margin-bottom: 24px;
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+      border: 1px solid #e5e7eb;
+    }
+    .timeline-axis-segment {
+      flex: 1;
+      padding: 12px 16px;
+      text-align: center;
+      font-size: 12px;
+      font-weight: 600;
+      color: #374151;
+      min-width: 0;
+    }
+    .timeline-axis-segment.overdue { background: #fef2f2; color: #991b1b; }
+    .timeline-axis-segment.d0-90 { background: #fff7ed; color: #c2410c; }
+    .timeline-axis-segment.d90-180 { background: #eff6ff; color: #1d4ed8; }
+    .timeline-axis-segment.d180 { background: #f0fdf4; color: #15803d; }
+    .timeline-axis-segment .segment-count { display: block; font-size: 18px; margin-top: 4px; }
+    .timeline {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-top: 8px;
+    }
+    @media (max-width: 1000px) { .timeline { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 600px) { .timeline { grid-template-columns: 1fr; } }
+    .timeline-lane {
+      border-radius: 12px;
+      padding: 18px;
+      min-height: 140px;
+      border: 2px solid #e5e7eb;
+      transition: all 0.2s ease;
+    }
+    .timeline-lane:hover { border-color: #667eea; box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15); }
+    .timeline-lane.overdue { border-left: 4px solid #dc2626; background: #fef2f2; }
+    .timeline-lane.d0-90 { border-left: 4px solid #ea580c; background: #fff7ed; }
+    .timeline-lane.d90-180 { border-left: 4px solid #2563eb; background: #eff6ff; }
+    .timeline-lane.d180 { border-left: 4px solid #16a34a; background: #f0fdf4; }
+    .timeline-lane h3 { font-size: 0.95rem; margin-bottom: 8px; color: #333; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .timeline-lane .count { font-size: 1.6rem; font-weight: 700; color: #667eea; }
+    .timeline-lane .sub { font-size: 12px; color: #6b7280; margin-bottom: 10px; }
+    .timeline-lane ul { list-style: none; margin: 0; padding: 0; max-height: 420px; overflow-y: auto; }
+    .timeline-lane li {
+      padding: 6px 0;
+      border-bottom: 1px solid rgba(0,0,0,0.06);
+      font-size: 13px;
+      color: #374151;
+    }
+    .timeline-lane li:last-child { border-bottom: none; }
+    .timeline-lane .asset-type { font-weight: 600; color: #555; }
+    .timeline-lane .eos-days { font-size: 11px; color: #6b7280; margin-left: 4px; }
+    .timeline-empty { text-align: center; color: #9ca3af; padding: 20px; font-size: 13px; }
+    .policy-row { border-bottom: 1px solid rgba(0,0,0,0.06); }
+    .policy-row-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; padding: 6px 0; }
+    .btn-resources {
+      padding: 4px 10px;
+      font-size: 11px;
+      font-weight: 600;
+      color: #667eea;
+      background: #eef2ff;
+      border: 1px solid #c7d2fe;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .btn-resources:hover { background: #e0e7ff; }
+    .btn-resources.open { background: #667eea; color: white; border-color: #667eea; }
+    .policy-resources {
+      margin: 8px 0 10px 12px;
+      padding: 10px 12px;
+      background: #f8fafc;
+      border-radius: 8px;
+      border: 1px solid #e2e8f0;
+      max-height: 280px;
+      overflow-y: auto;
+      font-size: 12px;
+    }
+    .policy-resources.loading { color: #6b7280; }
+    .resource-item {
+      padding: 6px 0;
+      border-bottom: 1px solid #f1f5f9;
+      word-break: break-all;
+    }
+    .resource-item:last-child { border-bottom: none; }
+    .resource-item .name { font-weight: 600; color: #334155; }
+    .resource-item .arn { color: #64748b; font-size: 11px; margin-top: 2px; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; }
+    .badge-overdue { background: #dc2626; color: white; }
+    .badge-d0-90 { background: #ea580c; color: white; }
+    .badge-d90-180 { background: #2563eb; color: white; }
+    .badge-d180 { background: #16a34a; color: white; }
+    .badge-urgent { background: #dc2626; color: white; }
+    .badge-soon { background: #ea580c; color: white; }
+    .badge-later { background: #2563eb; color: white; }
+    .badge-supported { background: #d1fae5; color: #065f46; }
+    .badge-gap { background: #fee2e2; color: #991b1b; }
+    .policies-list { margin-top: 12px; }
+    .policies-list li { margin-bottom: 8px; padding: 10px 12px; background: #f8fafc; border-radius: 8px; font-size: 14px; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 600px) { .grid2 { grid-template-columns: 1fr; } }
+    .step h3 { font-size: 14px; margin: 16px 0 8px; color: #555; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Firefly EOL Dashboard</h1>
+      <p>Plan sprints with EOL policies and a clear timeline. Dynamic data via Firefly API.</p>
+    </div>
+    <div class="content">
+      <div class="step">
+        <h2>1. Sign in</h2>
+        <div class="form-group">
+          <label>Access Key</label>
+          <input type="text" id="accessKey" placeholder="Firefly access key" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label>Secret Key</label>
+          <input type="password" id="secretKey" placeholder="Firefly secret key" autocomplete="off">
+        </div>
+        <button type="button" class="btn" id="btnAuth">Sign in</button>
+        <p id="authStatus" class="msg-error"></p>
+      </div>
+
+      <div class="step">
+        <h2>2. Load EOL policies & timeline</h2>
+        <p class="timeline-intro">All dates are relative to <strong>today</strong>. Policies are placed by EOS date (from API) so your teams can see what’s overdue, due in 0–90 days, 90 days–6 months, or 6+ months and plan sprints accordingly. <strong>View resources</strong> lists ARNs for that policy; for some types (e.g. Kubernetes) the inventory API may not return a list—timeline counts are still correct.</p>
+        <button type="button" class="btn" id="btnPolicies" disabled>Load EOL policies</button>
+        <button type="button" class="btn btn-secondary" id="btnExportCsv" disabled title="Export policy summary to CSV">Export CSV</button>
+        <button type="button" class="btn btn-secondary" id="btnExportFullCsv" disabled title="Export one row per asset with EOS and due date">Export full CSV (per asset)</button>
+        <p id="policiesStatus" class="msg-error"></p>
+        <div id="timelineSection" style="display: none;">
+          <div class="timeline-today" id="timelineToday"></div>
+          <div class="timeline-axis" id="timelineAxis"></div>
+          <h3 style="margin-bottom: 8px;">By EOS date (remediate 90 days before EOS)</h3>
+          <div class="timeline" id="timeline"></div>
+        </div>
+        <h3 style="margin-top: 24px;">All policies</h3>
+        <ul class="policies-list" id="policiesList"></ul>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    const base = window.location.origin;
+    let token = '';
+    let lastLoadedPolicies = [];
+
+    function getDaysUntilEos(policy) {
+      try {
+        const desc = policy.description;
+        if (!desc || typeof desc !== 'string') return null;
+        const parsed = JSON.parse(desc);
+        const attrs = parsed && parsed.attributes;
+        if (!Array.isArray(attrs) || attrs.length === 0) return null;
+        const nowSec = Math.floor(Date.now() / 1000);
+        let minTs = Infinity;
+        attrs.forEach(function(a) { if (a && typeof a.value === 'number' && a.value < minTs) minTs = a.value; });
+        if (minTs === Infinity) return null;
+        return Math.floor((minTs - nowSec) / 86400);
+      } catch (e) { return null; }
+    }
+
+    function bucketByDays(days) {
+      if (days === null) return null;
+      if (days < 0) return 'overdue';
+      if (days <= 90) return 'd0-90';
+      if (days <= 180) return 'd90-180';
+      return 'd180';
+    }
+
+    function urgencyFromPolicy(p) {
+      const name = (p.name || '').toLowerCase();
+      const badge = (p.badge || '').toLowerCase();
+      if (name.includes('ended') || badge.includes('ended') || badge.includes('end of support')) return 'overdue';
+      if (name.includes('imminent') || badge.includes('imminent')) return 'd0-90';
+      return 'd90-180';
+    }
+
+    function buildTimeline(hits) {
+      const now = new Date();
+      const todayStr = now.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+      document.getElementById('timelineToday').innerHTML = '<span class="label">Reference date</span><span class="date">' + todayStr + '</span>';
+
+      const overdue = [], d0_90 = [], d90_180 = [], d180 = [];
+      hits.forEach(function(p) {
+        const days = getDaysUntilEos(p);
+        let bucket = bucketByDays(days);
+        if (bucket === null) bucket = urgencyFromPolicy(p);
+        p._daysUntilEos = days;
+        p._eosBucket = bucket;
+        if (bucket === 'overdue') overdue.push(p);
+        else if (bucket === 'd0-90') d0_90.push(p);
+        else if (bucket === 'd90-180') d90_180.push(p);
+        else d180.push(p);
+      });
+
+      const totalOverdue = overdue.reduce(function(s, p) { return s + (p.total_assets || 0); }, 0);
+      const total0_90 = d0_90.reduce(function(s, p) { return s + (p.total_assets || 0); }, 0);
+      const total90_180 = d90_180.reduce(function(s, p) { return s + (p.total_assets || 0); }, 0);
+      const total180 = d180.reduce(function(s, p) { return s + (p.total_assets || 0); }, 0);
+
+      function escapeAttr(s) { return String(s || '').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+      function policyLi(p, showDays) {
+        const typeStr = Array.isArray(p.type) ? (p.type[0] || '') : (p.type || '');
+        const days = p._daysUntilEos;
+        const daysLabel = days !== null && days !== undefined ? (days < 0 ? ' (past EOS)' : ' (EOS in ' + days + 'd)') : '';
+        const nameEsc = escapeAttr(p.name);
+        const policyId = (p.id || p._id || '');
+        return '<li class="policy-row">' +
+          '<div class="policy-row-header">' +
+          '<span><span class="asset-type">' + typeStr + '</span> – ' + (p.total_assets || 0) + ' assets' + (showDays && daysLabel ? '<span class="eos-days">' + daysLabel + '</span>' : '') + '</span>' +
+          '<button type="button" class="btn-resources">View resources</button>' +
+          '</div>' +
+          '<div class="policy-resources" data-policy-name="' + nameEsc + '" data-policy-type="' + escapeAttr(typeStr) + '" data-policy-id="' + escapeAttr(policyId) + '" style="display:none"></div>' +
+          '</li>';
+      }
+      function listHtml(arr, showDays) {
+        if (!arr.length) return '<li class="timeline-empty">None</li>';
+        return arr.map(function(p) { return policyLi(p, showDays); }).join('');
+      }
+
+      document.getElementById('timelineAxis').innerHTML =
+        '<div class="timeline-axis-segment overdue">Overdue<br><span class="segment-count">' + totalOverdue + '</span></div>' +
+        '<div class="timeline-axis-segment d0-90">0–90 days<br><span class="segment-count">' + total0_90 + '</span></div>' +
+        '<div class="timeline-axis-segment d90-180">90d–6mo<br><span class="segment-count">' + total90_180 + '</span></div>' +
+        '<div class="timeline-axis-segment d180">6+ months<br><span class="segment-count">' + total180 + '</span></div>';
+
+      document.getElementById('timeline').innerHTML =
+        '<div class="timeline-lane overdue"><h3><span class="badge badge-overdue">Overdue</span> Past EOS</h3><div class="count">' + totalOverdue + '</div><div class="sub">remediate now</div><ul>' + listHtml(overdue, true) + '</ul></div>' +
+        '<div class="timeline-lane d0-90"><h3><span class="badge badge-d0-90">0–90 days</span> Due soon</h3><div class="count">' + total0_90 + '</div><div class="sub">this sprint / next</div><ul>' + listHtml(d0_90, true) + '</ul></div>' +
+        '<div class="timeline-lane d90-180"><h3><span class="badge badge-d90-180">90d–6mo</span></h3><div class="count">' + total90_180 + '</div><div class="sub">plan next quarter</div><ul>' + listHtml(d90_180, true) + '</ul></div>' +
+        '<div class="timeline-lane d180"><h3><span class="badge badge-d180">6+ months</span></h3><div class="count">' + total180 + '</div><div class="sub">backlog</div><ul>' + listHtml(d180, true) + '</ul></div>';
+
+      document.getElementById('timelineSection').style.display = 'block';
+      lastLoadedPolicies = hits;
+      var exportBtn = document.getElementById('btnExportCsv');
+      if (exportBtn) exportBtn.disabled = false;
+      bindResourceDropdowns();
+    }
+
+    function exportToCSV() {
+      if (!lastLoadedPolicies.length) return;
+      var segmentLabel = function(b) {
+        if (b === 'overdue') return 'Overdue';
+        if (b === 'd0-90') return '0-90 days';
+        if (b === 'd90-180') return '90d-6mo';
+        if (b === 'd180') return '6+ months';
+        return b || '';
+      };
+      var rows = [['Segment', 'Policy Name', 'Asset Type', 'Asset Count', 'Severity', 'Badge', 'Days until EOS']];
+      lastLoadedPolicies.forEach(function(p) {
+        var typeStr = Array.isArray(p.type) ? (p.type[0] || '') : (p.type || '');
+        rows.push([
+          segmentLabel(p._eosBucket),
+          (p.name || ''),
+          typeStr,
+          String(p.total_assets ?? 0),
+          (p.severity || ''),
+          (p.badge || ''),
+          p._daysUntilEos != null ? String(p._daysUntilEos) : ''
+        ]);
+      });
+      var csv = rows.map(function(row) {
+        return row.map(function(cell) {
+          var s = String(cell);
+          if (s.indexOf(',') >= 0 || s.indexOf('"') >= 0 || s.indexOf('\n') >= 0)
+            return '"' + s.replace(/"/g, '""') + '"';
+          return s;
+        }).join(',');
+      }).join('\n');
+      var blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'eol-policies-' + new Date().toISOString().split('T')[0] + '.csv';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
+
+    function bindResourceDropdowns() {
+      var section = document.getElementById('timelineSection');
+      if (!section) return;
+      section.removeEventListener('click', onResourceToggle);
+      section.addEventListener('click', onResourceToggle);
+    }
+    function onResourceToggle(e) {
+      var btn = e.target && e.target.classList && e.target.classList.contains('btn-resources') ? e.target : (e.target.closest && e.target.closest('.btn-resources'));
+      if (!btn) return;
+      var row = btn.closest('.policy-row');
+      var resourcesDiv = row && row.querySelector('.policy-resources');
+      if (!resourcesDiv) return;
+      var isOpening = resourcesDiv.style.display === 'none' || !resourcesDiv.style.display;
+      if (isOpening) {
+        resourcesDiv.style.display = 'block';
+        btn.classList.add('open');
+        if (!resourcesDiv.getAttribute('data-loaded')) {
+          resourcesDiv.innerHTML = '<span class="loading">Loading resources…</span>';
+          resourcesDiv.classList.add('loading');
+          var policyId = resourcesDiv.getAttribute('data-policy-id');
+          var policyType = resourcesDiv.getAttribute('data-policy-type');
+          fetch(base + '/api/inventory', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              accessToken: token,
+              policyId: policyId || undefined,
+              governance: resourcesDiv.getAttribute('data-policy-name') || undefined,
+              assetTypes: policyType || undefined,
+              assetState: 'managed',
+              size: 200
+            })
+          }).then(function(r) { return r.json(); }).then(function(data) {
+            var list = data.responseObjects || [];
+            resourcesDiv.classList.remove('loading');
+            resourcesDiv.setAttribute('data-loaded', '1');
+            if (!list.length) {
+              resourcesDiv.innerHTML = '<span class="timeline-empty">No resource list for this policy type. The inventory API may not return per-policy results for some types (e.g. kubernetes_deployment, kubernetes_pod). The timeline counts above are still correct from the governance API—use the main app or Firefly UI for full asset details.</span>';
+              return;
+            }
+            resourcesDiv.innerHTML = list.map(function(a) {
+              var name = a.name || a.resourceId || a.assetId || '—';
+              var arn = a.arn || a.resourceId || a.assetId || a.frn || '—';
+              return '<div class="resource-item"><span class="name">' + escapeHtml(name) + '</span><div class="arn">' + escapeHtml(arn) + '</div></div>';
+            }).join('');
+          }).catch(function(err) {
+            resourcesDiv.classList.remove('loading');
+            resourcesDiv.setAttribute('data-loaded', '1');
+            resourcesDiv.innerHTML = '<span class="timeline-empty">Error loading: ' + escapeHtml(err.message || 'Request failed') + '</span>';
+          });
+        }
+      } else {
+        resourcesDiv.style.display = 'none';
+        btn.classList.remove('open');
+      }
+    }
+    function escapeHtml(s) {
+      var div = document.createElement('div');
+      div.textContent = s;
+      return div.innerHTML;
+    }
+
+    function urgencyFromPolicyForBadge(p) {
+      const b = p._eosBucket || urgencyFromPolicy(p);
+      if (b === 'overdue') return 'badge-overdue';
+      if (b === 'd0-90') return 'badge-d0-90';
+      if (b === 'd90-180') return 'badge-d90-180';
+      return 'badge-d180';
+    }
+
+    document.getElementById('btnExportCsv').onclick = function() { exportToCSV(); };
+
+    document.getElementById('btnExportFullCsv').onclick = async function() {
+      if (!token) return;
+      const statusEl = document.getElementById('policiesStatus');
+      statusEl.textContent = 'Preparing full CSV (fetching all policies and assets)…';
+      statusEl.className = 'msg-error';
+      try {
+        const r = await fetch(base + '/api/export-full-csv', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ accessToken: token })
+        });
+        if (!r.ok) {
+          const err = await r.json().catch(() => ({}));
+          throw new Error(err.error || err.message || 'Export failed');
+        }
+        const blob = await r.blob();
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'eol-assets-full-' + new Date().toISOString().split('T')[0] + '.csv';
+        a.click();
+        URL.revokeObjectURL(a.href);
+        statusEl.textContent = 'Full CSV exported successfully.';
+        statusEl.className = 'msg-success';
+      } catch (e) {
+        statusEl.textContent = e.message || 'Export failed';
+        statusEl.className = 'msg-error';
+      }
+    };
+
+    document.getElementById('btnAuth').onclick = async () => {
+      const accessKey = document.getElementById('accessKey').value.trim();
+      const secretKey = document.getElementById('secretKey').value.trim();
+      const el = document.getElementById('authStatus');
+      el.textContent = '';
+      if (!accessKey || !secretKey) { el.textContent = 'Enter both keys'; el.className = 'msg-error'; return; }
+      try {
+        const r = await fetch(base + '/api/auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accessKey, secretKey }) });
+        const data = await r.json();
+        if (!r.ok) { el.textContent = data.error || 'Auth failed'; el.className = 'msg-error'; return; }
+        token = data.accessToken;
+        el.textContent = 'Signed in. You can load EOL policies and view the timeline.';
+        el.className = 'msg-success';
+        document.getElementById('btnPolicies').disabled = false;
+        document.getElementById('btnExportCsv').disabled = true;
+        document.getElementById('btnExportFullCsv').disabled = false;
+      } catch (e) {
+        el.textContent = e.message || 'Request failed';
+        el.className = 'msg-error';
+      }
+    };
+
+    document.getElementById('btnPolicies').onclick = async () => {
+      const statusEl = document.getElementById('policiesStatus');
+      const listEl = document.getElementById('policiesList');
+      const timelineSection = document.getElementById('timelineSection');
+      listEl.innerHTML = '';
+      timelineSection.style.display = 'none';
+      statusEl.textContent = 'Loading…';
+      statusEl.className = 'msg-error';
+      let allHits = [];
+      let afterKey = null;
+      try {
+        do {
+          const body = { accessToken: token, frameworks: ['EOL'], onlyMatchingAssets: true };
+          if (afterKey) body.afterKey = afterKey;
+          const r = await fetch(base + '/api/governance/insights', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+          const data = await r.json();
+          if (!r.ok) throw new Error(data.error || data.message || 'Request failed');
+          const hits = data.hits || [];
+          allHits = allHits.concat(hits);
+          afterKey = data.afterKey || null;
+        } while (afterKey);
+        statusEl.textContent = 'Loaded ' + allHits.length + ' EOL policies. Use the timeline above to plan sprints.';
+        statusEl.className = 'msg-success';
+        buildTimeline(allHits);
+        lastLoadedPolicies = allHits;
+        allHits.forEach(function(p) {
+          const li = document.createElement('li');
+          const typeStr = Array.isArray(p.type) ? (p.type[0] || '') : (p.type || '');
+          const bucketLabel = p._eosBucket === 'overdue' ? 'Overdue' : p._eosBucket === 'd0-90' ? '0–90d' : p._eosBucket === 'd90-180' ? '90d–6mo' : '6+mo';
+          li.innerHTML = '<span class="badge ' + urgencyFromPolicyForBadge(p) + '">' + bucketLabel + '</span> ' + (p.name || '') + ' — <strong>' + (p.total_assets ?? 0) + '</strong> assets';
+          listEl.appendChild(li);
+        });
+      } catch (e) {
+        statusEl.textContent = e.message || 'Error';
+        statusEl.className = 'msg-error';
+      }
+    };
+  </script>
+</body>
+</html>
