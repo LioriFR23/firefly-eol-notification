@@ -18,10 +18,10 @@ EOL/EOS timeline and planning app: sign in with your Firefly API credentials, lo
 
 ## How to run
 
-From the project root, run the dashboard (it lives in the `client-demo` subfolder):
+From the project root, run the dashboard (it lives in the `eol-dashboard` subfolder):
 
 ```bash
-cd client-demo
+cd eol-dashboard
 ./start.sh
 ```
 

@@ -105,6 +105,6 @@ Summary of gaps between client requirements and current Firefly API/product, for
 
 ## 6. Deliverables produced for client
 
-- **Demo app:** `client-demo/` – runnable PoC (auth, fetch EOL policies, view supported vs gap asset types).
-- **API assessment:** `client-demo/docs/API_ASSESSMENT.md` – can/cannot vs requirements.
-- **Client-facing technical doc:** `client-demo/docs/CLIENT_TECHNICAL_DOCUMENTATION.md` – endpoints, auth, request/response, pagination, supported types, limitations.
+- **EOL Dashboard app:** `eol-dashboard/` – runnable app (auth, fetch EOL policies, timeline, CSV export).
+- **API assessment:** `eol-dashboard/docs/API_ASSESSMENT.md` – can/cannot vs requirements.
+- **Client-facing technical doc:** `eol-dashboard/docs/CLIENT_TECHNICAL_DOCUMENTATION.md` – endpoints, auth, request/response, pagination, supported types, limitations.
